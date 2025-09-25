@@ -26,9 +26,9 @@ typedef enum memory_tag {
 
 } memory_tag;
 
-void initialize_memory();
+KAPI void initialize_memory();
 
-void shutdown_memory();
+KAPI void shutdown_memory();
 
 KAPI void* kallocate(u64 size, memory_tag tag);
 
