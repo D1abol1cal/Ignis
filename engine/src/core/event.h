@@ -44,7 +44,7 @@ KAPI b8 event_register(u16 code, void* listener, PFN_on_event on_event);
 KAPI b8 event_unregister(u16 code, void* listener, PFN_on_event on_event);
 
 //Fire an event to listeners of the given code.
-KAPI void event_fire(u16 code, void* sender, event_context data);
+KAPI b8 event_fire(u16 code, void* sender, event_context data);
 
 typedef enum system_event_code {
     // Shuts the application down on the next frame.

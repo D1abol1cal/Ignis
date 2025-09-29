@@ -3,6 +3,7 @@
 #include "platform/platform.h"
 #include "game_types.h"
 #include "core/kmemory.h"
+#include "core/event.h"
 
 typedef struct application_state {
     game* game_inst;
@@ -39,13 +40,18 @@ b8 application_create(game* game_inst) {
     app_state.is_running = TRUE;
     app_state.is_suspended = FALSE;
 
+    if(!event_initialize()) {
+        KFATAL("Event system initialization failed, shutting down!!");
+        return FALSE;
+    }
+
     if(!platform_startup(&app_state.platform, 
         game_inst->app_config.name, 
         game_inst->app_config.start_pox_x, 
         game_inst->app_config.start_pos_y, 
         game_inst->app_config.start_width, 
         game_inst->app_config.start_height)) {
-            KERROR("Failed to start platform!");
+            KERROR("Platform startup failed, shutting down!");
             return FALSE;
     }
 
@@ -88,6 +94,8 @@ b8 application_run() {
     }
 
     app_state.is_running = FALSE;
+
+    event_shutdown();
 
     platform_shutdown(&app_state.platform);
 
