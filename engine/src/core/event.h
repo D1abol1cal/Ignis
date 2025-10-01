@@ -27,7 +27,7 @@ typedef struct event_context {
 } event_context;
 
 //should return TRUE if the event was handled and should not be propagated further
-typedef b8 (*PFN_on_event)(i16 code, void* sender, void* listener_inst, event_context data);
+typedef b8 (*PFN_on_event)(u16 code, void* sender, void* listener_inst, event_context data);
 
 b8 event_initialize();
 
