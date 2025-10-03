@@ -1,5 +1,7 @@
 # Ignis Engine
 
+![alt text](Logo.png)
+
 This engine is going to be made up from the ground up using C and Vulkan.
 
 The word "ignis" is a Latin noun that primarily means "fire". It can also be translated as "flame" or "heat" in English.
