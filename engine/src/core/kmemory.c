@@ -2,6 +2,7 @@
 
 #include "core/logger.h"
 #include "platform/platform.h"
+#include "core/kstring.h"
 
 //TODO: custom string library to be created
 #include <string.h>
@@ -114,6 +115,6 @@ char* get_memory_usage_str() {
         offset += length;
     }
 
-    char * out_string = _strdup(buffer);
+    char * out_string = string_duplicate(buffer);
     return out_string;
 }
