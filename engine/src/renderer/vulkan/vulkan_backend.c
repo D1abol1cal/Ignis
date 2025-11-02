@@ -10,6 +10,8 @@
 
 #include "platform/platform.h"
 
+#include "vulkan_device.h"
+
 // static Vulkan context
 static vulkan_context context;
 
@@ -116,6 +118,14 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* app
     VK_CHECK(func(context.instance, &debug_create_info, context.allocator, &context.debug_messenger));
     KDEBUG("Vulkan debugger created.");
 #endif
+
+    
+
+    //Device creation
+    if (!vulkan_device_create(&context)) {
+        KFATAL("Failed to create Vulkan device.");
+        return FALSE;
+    }
 
     KINFO("Vulkan renderer initialized successfully.");
     return TRUE;
