@@ -29,7 +29,7 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* app
     app_info.apiVersion = VK_API_VERSION_1_2;
     app_info.pApplicationName = application_name;
     app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-    app_info.pEngineName = "Kohi Engine";
+    app_info.pEngineName = "Ignis Engine";
     app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
 
     VkInstanceCreateInfo create_info = {VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
