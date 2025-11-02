@@ -2,6 +2,7 @@
 
 #include "vulkan_types.inl"
 #include "vulkan_platform.h"
+#include "vulkan_device.h"
 
 #include "core/logger.h"
 #include "core/kstring.h"
@@ -9,8 +10,6 @@
 #include "containers/darray.h"
 
 #include "platform/platform.h"
-
-#include "vulkan_device.h"
 
 // static Vulkan context
 static vulkan_context context;
@@ -119,11 +118,17 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* app
     KDEBUG("Vulkan debugger created.");
 #endif
 
-    
+    // Surface
+    KDEBUG("Creating Vulkan surface...");
+    if (!platform_create_vulkan_surface(plat_state, &context)) {
+        KERROR("Failed to create platform surface!");
+        return FALSE;
+    }
+    KDEBUG("Vulkan surface created.");
 
-    //Device creation
+    // Device creation
     if (!vulkan_device_create(&context)) {
-        KFATAL("Failed to create Vulkan device.");
+        KERROR("Failed to create device!");
         return FALSE;
     }
 
