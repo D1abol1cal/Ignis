@@ -1,11 +1,9 @@
-
 #pragma once
 
 #include "defines.h"
 
 typedef struct event_context {
-    //128 bytes
-
+    // 128 bytes
     union {
         i64 i64[2];
         u64 u64[2];
@@ -22,30 +20,46 @@ typedef struct event_context {
         u8 u8[16];
 
         char c[16];
-
     } data;
 } event_context;
 
-//should return TRUE if the event was handled and should not be propagated further
+// Should return true if handled.
 typedef b8 (*PFN_on_event)(u16 code, void* sender, void* listener_inst, event_context data);
 
 b8 event_initialize();
-
 void event_shutdown();
 
-//FOLLOWING METHODS ARE EXPORTED
-
-//Register to listen for when events are sent with the pvovided code.
-
+/**
+ * Register to listen for when events are sent with the provided code. Events with duplicate
+ * listener/callback combos will not be registered again and will cause this to return FALSE.
+ * @param code The event code to listen for.
+ * @param listener A pointer to a listener instance. Can be 0/NULL.
+ * @param on_event The callback function pointer to be invoked when the event code is fired.
+ * @returns TRUE if the event is successfully registered; otherwise false.
+ */
 KAPI b8 event_register(u16 code, void* listener, PFN_on_event on_event);
 
-//Unregister to listen for when events are sent with the pvovided code.
-
+/**
+ * Unregister from listening for when events are sent with the provided code. If no matching
+ * registration is found, this function returns FALSE.
+ * @param code The event code to stop listening for.
+ * @param listener A pointer to a listener instance. Can be 0/NULL.
+ * @param on_event The callback function pointer to be unregistered.
+ * @returns TRUE if the event is successfully unregistered; otherwise false.
+ */
 KAPI b8 event_unregister(u16 code, void* listener, PFN_on_event on_event);
 
-//Fire an event to listeners of the given code.
-KAPI b8 event_fire(u16 code, void* sender, event_context data);
+/**
+ * Fires an event to listeners of the given code. If an event handler returns 
+ * TRUE, the event is considered handled and is not passed on to any more listeners.
+ * @param code The event code to fire.
+ * @param sender A pointer to the sender. Can be 0/NULL.
+ * @param data The event data.
+ * @returns TRUE if handled, otherwise FALSE.
+ */
+KAPI b8 event_fire(u16 code, void* sender, event_context context);
 
+// System internal event codes. Application should use codes beyond 255.
 typedef enum system_event_code {
     // Shuts the application down on the next frame.
     EVENT_CODE_APPLICATION_QUIT = 0x01,
@@ -96,4 +110,3 @@ typedef enum system_event_code {
 
     MAX_EVENT_CODE = 0xFF
 } system_event_code;
-

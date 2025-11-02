@@ -3,7 +3,7 @@
 #include "defines.h"
 
 typedef enum memory_tag {
-
+    // For temporary use. Should be assigned one of the below or have a new tag created.
     MEMORY_TAG_UNKNOWN,
     MEMORY_TAG_ARRAY,
     MEMORY_TAG_DARRAY,
@@ -23,16 +23,14 @@ typedef enum memory_tag {
     MEMORY_TAG_SCENE,
 
     MEMORY_TAG_MAX_TAGS
-
 } memory_tag;
 
 KAPI void initialize_memory();
-
 KAPI void shutdown_memory();
 
 KAPI void* kallocate(u64 size, memory_tag tag);
 
-KAPI void kfree(void* block, u64, memory_tag tag);
+KAPI void kfree(void* block, u64 size, memory_tag tag);
 
 KAPI void* kzero_memory(void* block, u64 size);
 

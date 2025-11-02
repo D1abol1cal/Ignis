@@ -3,7 +3,7 @@
 #include "platform/platform.h"
 
 void clock_update(clock* clock) {
-    if(clock->start_time != 0) {
+    if (clock->start_time != 0) {
         clock->elapsed = platform_get_absolute_time() - clock->start_time;
     }
 }

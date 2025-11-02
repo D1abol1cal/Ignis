@@ -1,9 +1,9 @@
 #include "game.h"
+
 #include <core/logger.h>
 
-
 b8 game_initialize(game* game_inst) {
-    KDEBUG("game_initialize() was called!")
+    KDEBUG("game_initialize() called!");
     return TRUE;
 }
 

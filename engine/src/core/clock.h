@@ -6,12 +6,12 @@ typedef struct clock {
     f64 elapsed;
 } clock;
 
-
-//has no affect on non-started clocks.
+// Updates the provided clock. Should be called just before checking elapsed time.
+// Has no effect on non-started clocks.
 void clock_update(clock* clock);
 
-//starts the provided clock. Resets elapsed time to zero.
+// Starts the provided clock. Resets elapsed time.
 void clock_start(clock* clock);
 
-//stops the provided clock. Does not reset elapsed time.
+// Stops the provided clock. Does not reset elapsed time.
 void clock_stop(clock* clock);

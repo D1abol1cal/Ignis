@@ -4,8 +4,8 @@
 #if KPLATFORM_LINUX
 
 #include "core/logger.h"
-#include "core/input.h"
 #include "core/event.h"
+#include "core/input.h"
 
 #include <xcb/xcb.h>
 #include <X11/keysym.h>
@@ -33,6 +33,7 @@ typedef struct internal_state {
     xcb_atom_t wm_delete_win;
 } internal_state;
 
+// Key translation
 keys translate_keycode(u32 x_keycode);
 
 b8 platform_startup(
@@ -306,6 +307,7 @@ void platform_sleep(u64 ms) {
 #endif
 }
 
+// Key translation
 keys translate_keycode(u32 x_keycode) {
     switch (x_keycode) {
         case XK_BackSpace:

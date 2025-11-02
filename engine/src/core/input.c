@@ -48,8 +48,6 @@ void input_update(f64 delta_time) {
 void input_process_key(keys key, b8 pressed) {
     // Only handle this if the state actually changed.
     if (state.keyboard_current.keys[key] != pressed) {
-        // KDEBUG("Key %i %s!", key, pressed ? "pressed" : "released");
-
         // Update internal state.
         state.keyboard_current.keys[key] = pressed;
 
@@ -65,7 +63,6 @@ void input_process_button(buttons button, b8 pressed) {
     if (state.mouse_current.buttons[button] != pressed) {
         state.mouse_current.buttons[button] = pressed;
 
-        // KDEBUG("Mouse button %i %s!", button, pressed ? "pressed" : "released");
         // Fire the event.
         event_context context;
         context.data.u16[0] = button;
