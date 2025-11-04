@@ -1,0 +1,96 @@
+Date : 2025-11-03 05:07:49
+Directory : d:\Projects\Ignis\code
+Total : 52 files,  4225 codes, 363 comments, 927 blanks, all 5515 lines
+
+Languages
++--------------+------------+------------+------------+------------+------------+
+| language     | files      | code       | comment    | blank      | total      |
++--------------+------------+------------+------------+------------+------------+
+| C            |         21 |      1,989 |        225 |        414 |      2,628 |
+| Markdown     |          2 |      1,272 |          0 |        328 |      1,600 |
+| C++          |         16 |        450 |        115 |        156 |        721 |
+| XML          |          7 |        437 |          0 |          0 |        437 |
+| Shell Script |          3 |         40 |         14 |         16 |         70 |
+| Batch        |          3 |         37 |          9 |         13 |         59 |
++--------------+------------+------------+------------+------------+------------+
+
+Directories
++---------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                | files      | code       | comment    | blank      | total      |
++---------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                   |         52 |      4,225 |        363 |        927 |      5,515 |
+| . (Files)                                                           |          4 |      1,302 |          3 |        339 |      1,644 |
+| .idea                                                               |          7 |        437 |          0 |          0 |        437 |
+| engine                                                              |         36 |      2,422 |        347 |        561 |      3,330 |
+| engine (Files)                                                      |          2 |         23 |         10 |          9 |         42 |
+| engine\src                                                          |         34 |      2,399 |        337 |        552 |      3,288 |
+| engine\src (Files)                                                  |          3 |        110 |         34 |         31 |        175 |
+| engine\src\containers                                               |          2 |        145 |         13 |         41 |        199 |
+| engine\src\core                                                     |         15 |        842 |        155 |        219 |      1,216 |
+| engine\src\platform                                                 |          3 |        735 |         84 |        127 |        946 |
+| engine\src\renderer                                                 |         11 |        567 |         51 |        134 |        752 |
+| engine\src\renderer (Files)                                         |          5 |         91 |          4 |         37 |        132 |
+| engine\src\renderer\vulkan                                          |          6 |        476 |         47 |         97 |        620 |
+| testbed                                                             |          5 |         64 |         13 |         27 |        104 |
+| testbed (Files)                                                     |          2 |         24 |         10 |          9 |         43 |
+| testbed\src                                                         |          3 |         40 |          3 |         18 |         61 |
++---------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++---------------------------------------------------------------------+--------------+------------+------------+------------+------------+
+| filename                                                            | language     | code       | comment    | blank      | total      |
++---------------------------------------------------------------------+--------------+------------+------------+------------+------------+
+| d:\Projects\Ignis\code\.idea\code.iml                               | XML          |          8 |          0 |          0 |          8 |
+| d:\Projects\Ignis\code\.idea\copilot.data.migration.agent.xml       | XML          |          6 |          0 |          0 |          6 |
+| d:\Projects\Ignis\code\.idea\copilot.data.migration.edit.xml        | XML          |          6 |          0 |          0 |          6 |
+| d:\Projects\Ignis\code\.idea\editor.xml                             | XML          |        344 |          0 |          0 |        344 |
+| d:\Projects\Ignis\code\.idea\modules.xml                            | XML          |          8 |          0 |          0 |          8 |
+| d:\Projects\Ignis\code\.idea\vcs.xml                                | XML          |          6 |          0 |          0 |          6 |
+| d:\Projects\Ignis\code\.idea\workspace.xml                          | XML          |         59 |          0 |          0 |         59 |
+| d:\Projects\Ignis\code\ARCHITECTURE.md                              | Markdown     |      1,244 |          0 |        318 |      1,562 |
+| d:\Projects\Ignis\code\README.md                                    | Markdown     |         28 |          0 |         10 |         38 |
+| d:\Projects\Ignis\code\build-all.bat                                | Batch        |         11 |          1 |          5 |         17 |
+| d:\Projects\Ignis\code\build-all.sh                                 | Shell Script |         19 |          2 |          6 |         27 |
+| d:\Projects\Ignis\code\engine\build.bat                             | Batch        |         13 |          4 |          4 |         21 |
+| d:\Projects\Ignis\code\engine\build.sh                              | Shell Script |         10 |          6 |          5 |         21 |
+| d:\Projects\Ignis\code\engine\src\containers\darray.c               | C            |         97 |          3 |         19 |        119 |
+| d:\Projects\Ignis\code\engine\src\containers\darray.h               | C++          |         48 |         10 |         22 |         80 |
+| d:\Projects\Ignis\code\engine\src\core\application.c                | C            |        151 |         24 |         41 |        216 |
+| d:\Projects\Ignis\code\engine\src\core\application.h                | C++          |         12 |          6 |         10 |         28 |
+| d:\Projects\Ignis\code\engine\src\core\asserts.h                    | C++          |         44 |          1 |          8 |         53 |
+| d:\Projects\Ignis\code\engine\src\core\clock.c                      | C            |         14 |          0 |          4 |         18 |
+| d:\Projects\Ignis\code\engine\src\core\clock.h                      | C++          |          9 |          4 |          4 |         17 |
+| d:\Projects\Ignis\code\engine\src\core\event.c                      | C            |         86 |         16 |         23 |        125 |
+| d:\Projects\Ignis\code\engine\src\core\event.h                      | C++          |         34 |         58 |         21 |        113 |
+| d:\Projects\Ignis\code\engine\src\core\input.c                      | C            |        132 |         16 |         27 |        175 |
+| d:\Projects\Ignis\code\engine\src\core\input.h                      | C++          |        143 |          2 |         22 |        167 |
+| d:\Projects\Ignis\code\engine\src\core\kmemory.c                    | C            |         90 |          3 |         20 |        113 |
+| d:\Projects\Ignis\code\engine\src\core\kmemory.h                    | C            |         30 |          1 |         10 |         41 |
+| d:\Projects\Ignis\code\engine\src\core\kstring.c                    | C            |         15 |          1 |          4 |         20 |
+| d:\Projects\Ignis\code\engine\src\core\kstring.h                    | C++          |          5 |          2 |          4 |         11 |
+| d:\Projects\Ignis\code\engine\src\core\logger.c                     | C            |         32 |         10 |          9 |         51 |
+| d:\Projects\Ignis\code\engine\src\core\logger.h                     | C++          |         45 |         11 |         12 |         68 |
+| d:\Projects\Ignis\code\engine\src\defines.h                         | C            |         72 |         16 |         13 |        101 |
+| d:\Projects\Ignis\code\engine\src\entry.h                           | C++          |         28 |          8 |         11 |         47 |
+| d:\Projects\Ignis\code\engine\src\game_types.h                      | C++          |         10 |         10 |          7 |         27 |
+| d:\Projects\Ignis\code\engine\src\platform\platform.h               | C++          |         23 |          3 |          9 |         35 |
+| d:\Projects\Ignis\code\engine\src\platform\platform_linux.c         | C            |        495 |         50 |         68 |        613 |
+| d:\Projects\Ignis\code\engine\src\platform\platform_win32.c         | C            |        217 |         31 |         50 |        298 |
+| d:\Projects\Ignis\code\engine\src\renderer\renderer_backend.c       | C            |         21 |          0 |          6 |         27 |
+| d:\Projects\Ignis\code\engine\src\renderer\renderer_backend.h       | C++          |          5 |          0 |          3 |          8 |
+| d:\Projects\Ignis\code\engine\src\renderer\renderer_frontend.c      | C            |         38 |          4 |         15 |         57 |
+| d:\Projects\Ignis\code\engine\src\renderer\renderer_frontend.h      | C            |          8 |          0 |          5 |         13 |
+| d:\Projects\Ignis\code\engine\src\renderer\renderer_types.inl       | C++          |         19 |          0 |          8 |         27 |
+| d:\Projects\Ignis\code\engine\src\renderer\vulkan\vulkan_backend.c  | C            |        137 |         14 |         33 |        184 |
+| d:\Projects\Ignis\code\engine\src\renderer\vulkan\vulkan_backend.h  | C++          |          7 |          0 |          4 |         11 |
+| d:\Projects\Ignis\code\engine\src\renderer\vulkan\vulkan_device.c   | C            |        281 |         28 |         42 |        351 |
+| d:\Projects\Ignis\code\engine\src\renderer\vulkan\vulkan_device.h   | C++          |          8 |          0 |          4 |         12 |
+| d:\Projects\Ignis\code\engine\src\renderer\vulkan\vulkan_platform.h | C            |          8 |          4 |          5 |         17 |
+| d:\Projects\Ignis\code\engine\src\renderer\vulkan\vulkan_types.inl  | C            |         35 |          1 |          9 |         45 |
+| d:\Projects\Ignis\code\testbed\build.bat                            | Batch        |         13 |          4 |          4 |         21 |
+| d:\Projects\Ignis\code\testbed\build.sh                             | Shell Script |         11 |          6 |          5 |         22 |
+| d:\Projects\Ignis\code\testbed\src\entry.c                          | C            |         16 |          3 |          6 |         25 |
+| d:\Projects\Ignis\code\testbed\src\game.c                           | C            |         14 |          0 |          5 |         19 |
+| d:\Projects\Ignis\code\testbed\src\game.h                           | C++          |         10 |          0 |          7 |         17 |
+| Total                                                               |              |      4,225 |        363 |        927 |      5,515 |
++---------------------------------------------------------------------+--------------+------------+------------+------------+------------+
