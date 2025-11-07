@@ -499,5 +499,3 @@ b8 physical_device_meets_requirements(
 
     return FALSE;
 }
-
-//For a test commit --
