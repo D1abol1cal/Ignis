@@ -1,6 +1,5 @@
 # Ignis Engine
 
-![alt text](Logo.png)
 
 This engine is going to be made up from the ground up using C and Vulkan.
 
