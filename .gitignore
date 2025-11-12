@@ -1,7 +1,9 @@
 bin/
 .vscode/
 commits
-LinkedIn posts/
+posts/
+/Test
 .VSCodeCounter/
 .idea/
 MDs/
+/obj
