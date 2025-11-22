@@ -220,14 +220,14 @@ KINLINE vec2 vec2_normalized(vec2 vector) {
  */
 KINLINE b8 vec2_compare(vec2 vector_0, vec2 vector_1, f32 tolerance) {
     if (kabs(vector_0.x - vector_1.x) > tolerance) {
-        return FALSE;
+        return false;
     }
 
     if (kabs(vector_0.y - vector_1.y) > tolerance) {
-        return FALSE;
+        return false;
     }
 
-    return TRUE;
+    return true;
 }
 
 /**
@@ -493,18 +493,18 @@ KINLINE vec3 vec3_cross(vec3 vector_0, vec3 vector_1) {
  */
 KINLINE const b8 vec3_compare(vec3 vector_0, vec3 vector_1, f32 tolerance) {
     if (kabs(vector_0.x - vector_1.x) > tolerance) {
-        return FALSE;
+        return false;
     }
 
     if (kabs(vector_0.y - vector_1.y) > tolerance) {
-        return FALSE;
+        return false;
     }
 
     if (kabs(vector_0.z - vector_1.z) > tolerance) {
-        return FALSE;
+        return false;
     }
 
-    return TRUE;
+    return true;
 }
 
 /**
@@ -1070,12 +1070,12 @@ KINLINE vec3 mat4_down(mat4 matrix) {
  * @return A 3-component directional vector.
  */
 KINLINE vec3 mat4_left(mat4 matrix) {
-    vec3 right;
-    right.x = -matrix.data[0];
-    right.y = -matrix.data[4];
-    right.z = -matrix.data[8];
-    vec3_normalize(&right);
-    return right;
+    vec3 left;
+    left.x = -matrix.data[0];
+    left.y = -matrix.data[4];
+    left.z = -matrix.data[8];
+    vec3_normalize(&left);
+    return left;
 }
 
 /**
@@ -1085,12 +1085,12 @@ KINLINE vec3 mat4_left(mat4 matrix) {
  * @return A 3-component directional vector.
  */
 KINLINE vec3 mat4_right(mat4 matrix) {
-    vec3 left;
-    left.x = matrix.data[0];
-    left.y = matrix.data[4];
-    left.z = matrix.data[8];
-    vec3_normalize(&left);
-    return left;
+    vec3 right;
+    right.x = matrix.data[0];
+    right.y = matrix.data[4];
+    right.z = matrix.data[8];
+    vec3_normalize(&right);
+    return right;
 }
 
 // ------------------------------------------
