@@ -77,7 +77,7 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* app
     app_info.apiVersion = VK_API_VERSION_1_2;
     app_info.pApplicationName = application_name;
     app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-    app_info.pEngineName = "Kohi Engine";
+    app_info.pEngineName = "Ignis Engine";
     app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
 
     VkInstanceCreateInfo create_info = {VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
@@ -239,17 +239,19 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* app
     vertex_3d verts[vert_count];
     kzero_memory(verts, sizeof(vertex_3d) * vert_count);
 
-    verts[0].position.x = 0.0;
-    verts[0].position.y = -0.5;
+    const f32 f = 10.0f;
 
-    verts[1].position.x = 0.5;
-    verts[1].position.y = 0.5;
+    verts[0].position.x = -0.5 * f;
+    verts[0].position.y = -0.5 * f;
 
-    verts[2].position.x = 0;
-    verts[2].position.y = 0.5;
+    verts[1].position.y = 0.5 * f;
+    verts[1].position.x = 0.5 * f;
 
-    verts[3].position.x = 0.5;
-    verts[3].position.y = -0.5;
+    verts[2].position.x = -0.5 * f;
+    verts[2].position.y = 0.5 * f;
+
+    verts[3].position.x = 0.5 * f;
+    verts[3].position.y = -0.5 * f;
 
     const u32 index_count = 6;
     u32 indices[index_count] = {0, 1, 2, 0, 3, 1};
@@ -443,21 +445,20 @@ b8 vulkan_renderer_backend_begin_frame(renderer_backend* backend, f32 delta_time
         &context.main_renderpass,
         context.swapchain.framebuffers[context.image_index].handle);
 
-    // TODO: temporary test code
+    return true;
+}
+
+void vulkan_renderer_update_global_state(mat4 projection, mat4 view, vec3 view_position, vec4 ambient_colour, i32 mode) {
+    vulkan_command_buffer* command_buffer = &context.graphics_command_buffers[context.image_index];
+
     vulkan_object_shader_use(&context, &context.object_shader);
 
-    // Bind vertex buffer at offset.
-    VkDeviceSize offsets[1] = {0};
-    vkCmdBindVertexBuffers(command_buffer->handle, 0, 1, &context.object_vertex_buffer.handle, (VkDeviceSize*)offsets);
+    context.object_shader.global_ubo.projection = projection;
+    context.object_shader.global_ubo.view = view;
 
-    // Bind index buffer at offset.
-    vkCmdBindIndexBuffer(command_buffer->handle, context.object_index_buffer.handle, 0, VK_INDEX_TYPE_UINT32);
+    // TODO: other ubo properties
 
-    // Issue the draw.
-    vkCmdDrawIndexed(command_buffer->handle, 6, 1, 0, 0, 0);
-    // TODO: end temporary test code
-
-    return true;
+    vulkan_object_shader_update_global_state(&context, &context.object_shader);
 }
 
 b8 vulkan_renderer_backend_end_frame(renderer_backend* backend, f32 delta_time) {
@@ -527,6 +528,26 @@ b8 vulkan_renderer_backend_end_frame(renderer_backend* backend, f32 delta_time) 
         context.image_index);
 
     return true;
+}
+
+void vulkan_backend_update_object(mat4 model) {
+    vulkan_command_buffer* command_buffer = &context.graphics_command_buffers[context.image_index];
+    
+    vulkan_object_shader_update_object(&context, &context.object_shader, model);
+
+    // TODO: temporary test code
+    vulkan_object_shader_use(&context, &context.object_shader);
+
+    // Bind vertex buffer at offset.
+    VkDeviceSize offsets[1] = {0};
+    vkCmdBindVertexBuffers(command_buffer->handle, 0, 1, &context.object_vertex_buffer.handle, (VkDeviceSize*)offsets);
+
+    // Bind index buffer at offset.
+    vkCmdBindIndexBuffer(command_buffer->handle, context.object_index_buffer.handle, 0, VK_INDEX_TYPE_UINT32);
+
+    // Issue the draw.
+    vkCmdDrawIndexed(command_buffer->handle, 6, 1, 0, 0, 0);
+    // TODO: end temporary test code
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback(
