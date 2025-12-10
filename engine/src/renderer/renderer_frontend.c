@@ -117,10 +117,10 @@ b8 load_texture(const char* texture_name, texture* t) {
 
 // TODO: temp
 b8 event_on_debug_event(u16 code, void* sender, void* listener_inst, event_context data) {
-    const char* names[3] = {
-        "cobblestone",
-        "paving",
-        "paving2"};
+    const char* names[10] = {
+        "interface_1_no_effects",
+        "interface_4_with_effects",
+        "interface_3_with_effects"};
     static i8 choice = 2;
     choice++;
     choice %= 3;
