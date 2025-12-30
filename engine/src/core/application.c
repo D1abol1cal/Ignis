@@ -66,6 +66,7 @@ typedef struct application_state {
 
     // TODO: temp
     geometry* test_geometry;
+    geometry* test_ui_geometry;
     // TODO: end temp
 
 } application_state;
@@ -186,7 +187,7 @@ b8 application_create(game* game_inst) {
     resource_sys_config.max_loader_count = 32;
     resource_system_initialize(&app_state->resource_system_memory_requirement, 0, resource_sys_config);
     app_state->resource_system_state = linear_allocator_allocate(&app_state->systems_allocator, app_state->resource_system_memory_requirement);
-    if(!resource_system_initialize(&app_state->resource_system_memory_requirement, app_state->resource_system_state, resource_sys_config)) {
+    if (!resource_system_initialize(&app_state->resource_system_memory_requirement, app_state->resource_system_state, resource_sys_config)) {
         KFATAL("Failed to initialize resource system. Aborting application.");
         return false;
     }
@@ -229,7 +230,7 @@ b8 application_create(game* game_inst) {
         return false;
     }
 
-    // TODO: temp 
+    // TODO: temp
 
     // Load up a plane configuration, and load geometry from it.
     geometry_config g_config = geometry_system_generate_plane_config(10.0f, 5.0f, 5, 5, 5.0f, 2.0f, "test geometry", "test_material");
@@ -239,9 +240,48 @@ b8 application_create(game* game_inst) {
     kfree(g_config.vertices, sizeof(vertex_3d) * g_config.vertex_count, MEMORY_TAG_ARRAY);
     kfree(g_config.indices, sizeof(u32) * g_config.index_count, MEMORY_TAG_ARRAY);
 
+    // Load up some test UI geometry.
+    geometry_config ui_config;
+    ui_config.vertex_size = sizeof(vertex_2d);
+    ui_config.vertex_count = 4;
+    ui_config.index_size = sizeof(u32);
+    ui_config.index_count = 6;
+    string_ncopy(ui_config.material_name, "test_ui_material", MATERIAL_NAME_MAX_LENGTH);
+    string_ncopy(ui_config.name, "test_ui_geometry", GEOMETRY_NAME_MAX_LENGTH);
+
+    const f32 f = 512.0f;
+    vertex_2d uiverts [4];
+    uiverts[0].position.x = 0.0f;  // 0    3
+    uiverts[0].position.y = 0.0f;  //
+    uiverts[0].texcoord.x = 0.0f;  //
+    uiverts[0].texcoord.y = 0.0f;  // 2    1
+
+    uiverts[1].position.y = f;
+    uiverts[1].position.x = f;
+    uiverts[1].texcoord.x = 1.0f;
+    uiverts[1].texcoord.y = 1.0f;
+
+    uiverts[2].position.x = 0.0f;
+    uiverts[2].position.y = f;
+    uiverts[2].texcoord.x = 0.0f;
+    uiverts[2].texcoord.y = 1.0f;
+
+    uiverts[3].position.x = f;
+    uiverts[3].position.y = 0.0;
+    uiverts[3].texcoord.x = 1.0f;
+    uiverts[3].texcoord.y = 0.0f;
+    ui_config.vertices = uiverts;
+
+    // Indices - counter-clockwise
+    u32 uiindices[6] = {2, 1, 0, 3, 0, 1};
+    ui_config.indices = uiindices;
+
+    // Get UI geometry from config.
+    app_state->test_ui_geometry = geometry_system_acquire_from_config(ui_config, true);
+
     // Load up default geometry.
     //app_state->test_geometry = geometry_system_get_default();
-    // TODO: end temp 
+    // TODO: end temp
 
     // Initialize the game.
     if (!app_state->game_inst->initialize(app_state->game_inst)) {
@@ -302,6 +342,12 @@ b8 application_run() {
 
             packet.geometry_count = 1;
             packet.geometries = &test_render;
+
+            geometry_render_data test_ui_render;
+            test_ui_render.geometry = app_state->test_ui_geometry;
+            test_ui_render.model = mat4_translation((vec3){0, 0, 0});
+            packet.ui_geometry_count = 1;
+            packet.ui_geometries = &test_ui_render;
             // TODO: end temp
 
             renderer_draw_frame(&packet);
