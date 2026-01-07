@@ -209,7 +209,7 @@ b8 application_create(game* game_inst) {
     shader_sys_config.max_instance_textures = 31;
     shader_system_initialize(&app_state->shader_system_memory_requirement, 0, shader_sys_config);
     app_state->shader_system_state = linear_allocator_allocate(&app_state->systems_allocator, app_state->shader_system_memory_requirement);
-    if (!shader_system_initialize(&app_state->shader_system_memory_requirement, app_state->shader_system_state, shader_sys_config)) {
+    if(!shader_system_initialize(&app_state->shader_system_memory_requirement, app_state->shader_system_state, shader_sys_config)) {
         KFATAL("Failed to initialize shader system. Aborting application.");
         return false;
     }
@@ -361,11 +361,11 @@ b8 application_run() {
             // TODO: temp
             geometry_render_data test_render;
             test_render.geometry = app_state->test_geometry;
-            test_render.model = mat4_identity();
-            // static f32 angle = 0;
-            // angle += (1.0f * delta);
-            // quat rotation = quat_from_axis_angle((vec3){0, 1, 0}, angle, true);
-            // test_render.model = quat_to_mat4(rotation);  //  quat_to_rotation_matrix(rotation, vec3_zero());
+            //test_render.model = mat4_identity();
+            static f32 angle = 0;
+            angle += (1.0f * delta);
+            quat rotation = quat_from_axis_angle((vec3){0, 1, 0}, angle, true);
+            test_render.model = quat_to_mat4(rotation);
 
             packet.geometry_count = 1;
             packet.geometries = &test_render;
