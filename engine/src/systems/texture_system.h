@@ -25,6 +25,13 @@ typedef struct texture_system_config {
 /** @brief The default texture name. */
 #define DEFAULT_TEXTURE_NAME "default"
 
+/** @brief The default specular texture name. */
+#define DEFAULT_SPECULAR_TEXTURE_NAME "default_SPEC"
+
+/** @brief The default normal texture name. */
+#define DEFAULT_NORMAL_TEXTURE_NAME "default_NORM"
+
+
 /**
  * @brief Initializes the texture system.
  * Should be called twice; once to get the memory requirement (passing state=0), and a second
@@ -70,3 +77,15 @@ void texture_system_release(const char* name);
  * done for default textures.
  */
 texture* texture_system_get_default_texture();
+
+/**
+ * @brief Gets a pointer to the default specular texture. No reference counting is 
+ * done for default textures.
+ */
+texture* texture_system_get_default_specular_texture();
+
+/**
+ * @brief Gets a pointer to the default normal texture. No reference counting is 
+ * done for default textures.
+ */
+texture* texture_system_get_default_normal_texture();

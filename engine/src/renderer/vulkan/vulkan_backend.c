@@ -211,7 +211,7 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* app
         &context,
         &context.main_renderpass,
         (vec4){0, 0, context.framebuffer_width, context.framebuffer_height},
-        (vec4){0.0f, 0.0f, 0.2f, 1.0f},
+        (vec4){0.01f, 0.01f, 0.03f, 1.0f},
         1.0f,
         0,
         RENDERPASS_CLEAR_COLOUR_BUFFER_FLAG | RENDERPASS_CLEAR_DEPTH_BUFFER_FLAG | RENDERPASS_CLEAR_STENCIL_BUFFER_FLAG,
