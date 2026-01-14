@@ -7,4 +7,6 @@ posts/
 .idea/
 MDs/
 /obj
-/assets 
+assets/
+**/tmpclaude-*-cwd
+tmpclaude-*-cwd

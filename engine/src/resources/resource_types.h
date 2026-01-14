@@ -23,10 +23,10 @@ typedef enum resource_type {
     RESOURCE_TYPE_IMAGE,
     /** @brief Material resource type. */
     RESOURCE_TYPE_MATERIAL,
-    /** @brief Static mesh resource type. */
-    RESOURCE_TYPE_STATIC_MESH,
     /** @brief Shader resource type (or more accurately shader config). */
     RESOURCE_TYPE_SHADER,
+    /** @brief Mesh resource type (collection of geometry configs). */
+    RESOURCE_TYPE_MESH,
     /** @brief Custom resource type. Used by loaders outside the core engine. */
     RESOURCE_TYPE_CUSTOM
 } resource_type;
@@ -170,6 +170,9 @@ typedef struct material {
     f32 shininess;
 
     u32 shader_id;
+
+    /** @brief Synced to the renderer's current frame number when the material has been applied that frame. */
+    u32 render_frame_number;
 } material;
 
 /** @brief The maximum length of a geometry name. */
@@ -191,6 +194,12 @@ typedef struct geometry {
     /** @brief A pointer to the material associated with this geometry.. */
     material* material;
 } geometry;
+
+typedef struct mesh {
+    u16 geometry_count;
+    geometry** geometries;
+    transform transform;
+} mesh;
 
 /** @brief Shader stages available in the system. */
 typedef enum shader_stage {
