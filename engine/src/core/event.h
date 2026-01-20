@@ -71,14 +71,11 @@ typedef b8 (*PFN_on_event)(u16 code, void* sender, void* listener_inst, event_co
 
 /**
  * @brief Initializes the event system.
- * @param memory_requirement A pointer to hold the required memory for the event system.
- * @param state A pointer to the event system state, or 0 if just querying memory requirement.
  */
 void event_system_initialize(u64* memory_requirement, void* state);
 
 /**
  * @brief Shuts the event system down.
- * @param state A pointer to the event system state.
  */
 void event_system_shutdown(void* state);
 
