@@ -267,6 +267,7 @@ b8 create_default_textures(texture_system_state* state) {
     state->default_texture.channel_count = 4;
     state->default_texture.generation = INVALID_ID;
     state->default_texture.has_transparency = false;
+    state->default_texture.is_writeable = false;
     renderer_create_texture(pixels, &state->default_texture);
     // Manually set the texture generation to invalid since this is a default texture.
     state->default_texture.generation = INVALID_ID;
@@ -282,6 +283,7 @@ b8 create_default_textures(texture_system_state* state) {
     state->default_diffuse_texture.channel_count = 4;
     state->default_diffuse_texture.generation = INVALID_ID;
     state->default_diffuse_texture.has_transparency = false;
+    state->default_diffuse_texture.is_writeable = false;
     renderer_create_texture(diff_pixels, &state->default_diffuse_texture);
     // Manually set the texture generation to invalid since this is a default texture.
     state->default_diffuse_texture.generation = INVALID_ID;
@@ -289,18 +291,15 @@ b8 create_default_textures(texture_system_state* state) {
     // Specular texture.
     KTRACE("Creating default specular texture...");
     u8 spec_pixels[16 * 16 * 4];
-    // Default spec map is black (no specular) but with full alpha
+    // Default spec map is black (no specular)
     kset_memory(spec_pixels, 0, sizeof(u8) * 16 * 16 * 4);
-    // Set alpha channel to 255 (opaque)
-    for (u32 i = 0; i < 16 * 16; ++i) {
-        spec_pixels[i * 4 + 3] = 255;
-    }
     string_ncopy(state->default_specular_texture.name, DEFAULT_SPECULAR_TEXTURE_NAME, TEXTURE_NAME_MAX_LENGTH);
     state->default_specular_texture.width = 16;
     state->default_specular_texture.height = 16;
     state->default_specular_texture.channel_count = 4;
     state->default_specular_texture.generation = INVALID_ID;
     state->default_specular_texture.has_transparency = false;
+    state->default_specular_texture.is_writeable = false;
     renderer_create_texture(spec_pixels, &state->default_specular_texture);
     // Manually set the texture generation to invalid since this is a default texture.
     state->default_specular_texture.generation = INVALID_ID;
@@ -329,6 +328,7 @@ b8 create_default_textures(texture_system_state* state) {
     state->default_normal_texture.channel_count = 4;
     state->default_normal_texture.generation = INVALID_ID;
     state->default_normal_texture.has_transparency = false;
+    state->default_normal_texture.is_writeable = false;
     renderer_create_texture(normal_pixels, &state->default_normal_texture);
     // Manually set the texture generation to invalid since this is a default texture.
     state->default_normal_texture.generation = INVALID_ID;
@@ -378,6 +378,7 @@ b8 load_texture(const char* texture_name, texture* t) {
     string_ncopy(temp_texture.name, texture_name, TEXTURE_NAME_MAX_LENGTH);
     temp_texture.generation = INVALID_ID;
     temp_texture.has_transparency = has_transparency;
+    temp_texture.is_writeable = false;
 
     // Acquire internal texture resources and upload to GPU.
     renderer_create_texture(resource_data->pixels, &temp_texture);
