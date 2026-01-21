@@ -158,21 +158,32 @@ typedef enum vulkan_render_pass_state {
 typedef struct vulkan_renderpass {
     /** @brief The internal renderpass handle. */
     VkRenderPass handle;
-    /** @brief The current render area of the renderpass. */
 
-    /** @brief The depth clear value. */
+    /** @brief Clear flags for color, depth, stencil. */
+    renderpass_clear_flag clear_flags;
+
+    /** @brief The clear color of the renderpass. */
+    vec4 clear_colour; // or your vector type for RGBA
+
+    /** @brief The render area (x, y, width, height). */
+    vec4 render_area; // define Rect or use a struct with .x, .y, .z, .w
+
+    /** @brief Depth clear value. */
     f32 depth;
-    /** @brief The stencil clear value. */
+
+    /** @brief Stencil clear value. */
     u32 stencil;
 
     /** @brief Indicates if there is a previous renderpass. */
     b8 has_prev_pass;
+
     /** @brief Indicates if there is a next renderpass. */
     b8 has_next_pass;
 
-    /** @brief Indicates renderpass state. */
+    /** @brief Renderpass state. */
     vulkan_render_pass_state state;
 } vulkan_renderpass;
+
 
 /**
  * @brief Representation of the Vulkan swapchain.
