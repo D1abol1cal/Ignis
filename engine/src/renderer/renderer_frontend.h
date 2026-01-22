@@ -78,6 +78,21 @@ void renderer_texture_create(const u8* pixels, struct texture* texture);
 void renderer_texture_destroy(struct texture* texture);
 
 /**
+ * @brief Creates a cubemap texture from 6 face images.
+ *
+ * @param face_pixels Array of 6 pointers to pixel data (order: +X, -X, +Y, -Y, +Z, -Z).
+ * @param texture A pointer to the texture to hold the resources.
+ */
+void renderer_cubemap_create(const u8** face_pixels, struct texture* texture);
+
+/**
+ * @brief Destroys a cubemap texture.
+ *
+ * @param texture A pointer to the cubemap texture to destroy.
+ */
+void renderer_cubemap_destroy(struct texture* texture);
+
+/**
  * @brief Creates a new writeable texture with no data written to it.
  *
  * @param t A pointer to the texture to hold the resources.
@@ -286,3 +301,10 @@ void renderer_renderpass_create(renderpass* out_renderpass, f32 depth, u32 stenc
  * @param pass A pointer to the renderpass to be destroyed.
  */
 void renderer_renderpass_destroy(renderpass* pass);
+
+/**
+ * @brief Draws the given geometry.
+ *
+ * @param data The geometry render data containing the geometry and model matrix.
+ */
+void renderer_draw_geometry(geometry_render_data data);

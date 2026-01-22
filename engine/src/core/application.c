@@ -20,6 +20,7 @@
 #include "systems/geometry_system.h"
 #include "systems/resource_system.h"
 #include "systems/shader_system.h"
+#include "systems/skybox_system.h"
 #include "systems/imgui_system.h"
 
 // editor
@@ -71,6 +72,9 @@ typedef struct application_state {
 
     u64 geometry_system_memory_requirement;
     void* geometry_system_state;
+
+    u64 skybox_system_memory_requirement;
+    void* skybox_system_state;
 
     // TODO: temp
     mesh meshes[10];
@@ -251,6 +255,15 @@ b8 application_create(game* game_inst) {
     if (!geometry_system_initialize(&app_state->geometry_system_memory_requirement, app_state->geometry_system_state, geometry_sys_config)) {
         KFATAL("Failed to initialize geometry system. Application cannot continue.");
         return false;
+    }
+
+    // Skybox system.
+    skybox_system_config skybox_sys_config;
+    skybox_sys_config.skybox_base_path = "../assets/skyboxes";
+    skybox_system_initialize(&app_state->skybox_system_memory_requirement, 0, skybox_sys_config);
+    app_state->skybox_system_state = linear_allocator_allocate(&app_state->systems_allocator, app_state->skybox_system_memory_requirement);
+    if (!skybox_system_initialize(&app_state->skybox_system_memory_requirement, app_state->skybox_system_state, skybox_sys_config)) {
+        KWARN("Failed to initialize skybox system. Continuing without skybox support.");
     }
 
     // TODO: temp
@@ -546,6 +559,9 @@ b8 application_run() {
 
     // Shutdown ImGui system before renderer
     imgui_system_shutdown();
+
+    // Shutdown skybox system
+    skybox_system_shutdown(app_state->skybox_system_state);
 
     geometry_system_shutdown(app_state->geometry_system_state);
 

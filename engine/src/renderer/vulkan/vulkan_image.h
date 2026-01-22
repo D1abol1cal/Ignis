@@ -87,8 +87,66 @@ void vulkan_image_copy_from_buffer(
 
 /**
  * @brief Destroys the given image.
- * 
+ *
  * @param context A pointer to the Vulkan context.
  * @param image A pointer to the image to be destroyed.
  */
 void vulkan_image_destroy(vulkan_context* context, vulkan_image* image);
+
+/**
+ * @brief Creates a new Vulkan cubemap image for skybox rendering.
+ *
+ * @param context A pointer to the Vulkan context.
+ * @param width The width of each cube face.
+ * @param height The height of each cube face.
+ * @param format The format of the image.
+ * @param usage The image usage.
+ * @param memory_flags Memory flags for the memory used by the image.
+ * @param create_view Indicates if a view should be created with the image.
+ * @param out_image A pointer to hold the newly-created cubemap image.
+ */
+void vulkan_cubemap_create(
+    vulkan_context* context,
+    u32 width,
+    u32 height,
+    VkFormat format,
+    VkImageUsageFlags usage,
+    VkMemoryPropertyFlags memory_flags,
+    b32 create_view,
+    vulkan_image* out_image);
+
+/**
+ * @brief Creates a cube view for the given cubemap image.
+ *
+ * @param context A pointer to the Vulkan context.
+ * @param format The image format.
+ * @param image A pointer to the cubemap image.
+ */
+void vulkan_cubemap_view_create(
+    vulkan_context* context,
+    VkFormat format,
+    vulkan_image* image);
+
+/**
+ * @brief Transitions the cubemap image layout.
+ */
+void vulkan_cubemap_transition_layout(
+    vulkan_context* context,
+    vulkan_command_buffer* command_buffer,
+    vulkan_image* image,
+    VkFormat format,
+    VkImageLayout old_layout,
+    VkImageLayout new_layout);
+
+/**
+ * @brief Copies data from buffer to a specific face of the cubemap.
+ * @param face_index The cube face index (0-5: +X, -X, +Y, -Y, +Z, -Z).
+ * @param buffer_offset The offset in the buffer for this face's data.
+ */
+void vulkan_cubemap_copy_face_from_buffer(
+    vulkan_context* context,
+    vulkan_image* image,
+    VkBuffer buffer,
+    vulkan_command_buffer* command_buffer,
+    u32 face_index,
+    u64 buffer_offset);

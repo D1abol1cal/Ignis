@@ -6,6 +6,7 @@
 
 #define BUILTIN_SHADER_NAME_MATERIAL "Shader.Builtin.Material"
 #define BUILTIN_SHADER_NAME_UI "Shader.Builtin.UI"
+#define BUILTIN_SHADER_NAME_SKYBOX "Shader.Builtin.Skybox"
 
 struct shader;
 struct shader_uniform;
@@ -212,6 +213,21 @@ typedef struct renderer_backend {
      * @param texture A pointer to the texture to be destroyed.
      */
     void (*texture_destroy)(struct texture* texture);
+
+    /**
+     * @brief Creates a cubemap texture from 6 face images.
+     *
+     * @param face_pixels Array of 6 pointers to pixel data.
+     * @param texture A pointer to the texture to hold the resources.
+     */
+    void (*cubemap_create)(const u8** face_pixels, struct texture* texture);
+
+    /**
+     * @brief Destroys a cubemap texture.
+     *
+     * @param texture A pointer to the cubemap texture to destroy.
+     */
+    void (*cubemap_destroy)(struct texture* texture);
 
     /**
      * @brief Creates a new writeable texture with no data written to it.

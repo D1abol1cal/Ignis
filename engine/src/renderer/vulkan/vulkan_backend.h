@@ -72,3 +72,16 @@ struct vulkan_context;
  * @returns Pointer to the vulkan_context structure.
  */
 struct vulkan_context* vulkan_get_context(void);
+
+/**
+ * @brief Creates a cubemap texture from 6 face images.
+ * @param face_pixels Array of 6 pointers to pixel data (order: +X, -X, +Y, -Y, +Z, -Z).
+ * @param texture The texture to populate.
+ */
+void vulkan_renderer_cubemap_create(const u8** face_pixels, texture* texture);
+
+/**
+ * @brief Destroys a cubemap texture.
+ * @param texture The cubemap texture to destroy.
+ */
+void vulkan_renderer_cubemap_destroy(texture* texture);

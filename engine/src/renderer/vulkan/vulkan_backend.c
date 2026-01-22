@@ -797,6 +797,76 @@ void vulkan_renderer_texture_destroy(struct texture* texture) {
     kzero_memory(texture, sizeof(struct texture));
 }
 
+void vulkan_renderer_cubemap_create(const u8** face_pixels, texture* t) {
+    // Internal data creation
+    t->internal_data = (vulkan_image*)kallocate(sizeof(vulkan_image), MEMORY_TAG_TEXTURE);
+    vulkan_image* image = (vulkan_image*)t->internal_data;
+
+    VkFormat image_format = VK_FORMAT_R8G8B8A8_UNORM;
+    u32 face_size = t->width * t->height * t->channel_count;
+    u32 total_size = face_size * 6;
+
+    // Create cubemap image
+    vulkan_cubemap_create(
+        &context,
+        t->width,
+        t->height,
+        image_format,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        true,
+        image);
+
+    // Create staging buffer for all 6 faces
+    VkBufferUsageFlags usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    VkMemoryPropertyFlags memory_prop_flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    vulkan_buffer staging;
+    vulkan_buffer_create(&context, total_size, usage, memory_prop_flags, true, false, &staging);
+
+    // Load all face data into staging buffer
+    for (u32 i = 0; i < 6; i++) {
+        vulkan_buffer_load_data(&context, &staging, face_size * i, face_size, 0, face_pixels[i]);
+    }
+
+    // Begin command buffer
+    vulkan_command_buffer temp_buffer;
+    VkCommandPool pool = context.device.graphics_command_pool;
+    VkQueue queue = context.device.graphics_queue;
+    vulkan_command_buffer_allocate_and_begin_single_use(&context, pool, &temp_buffer);
+
+    // Transition layout for transfer
+    vulkan_cubemap_transition_layout(
+        &context,
+        &temp_buffer,
+        image,
+        image_format,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+    // Copy each face from buffer
+    for (u32 i = 0; i < 6; i++) {
+        vulkan_cubemap_copy_face_from_buffer(&context, image, staging.handle, &temp_buffer, i, face_size * i);
+    }
+
+    // Transition to shader read
+    vulkan_cubemap_transition_layout(
+        &context,
+        &temp_buffer,
+        image,
+        image_format,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    vulkan_command_buffer_end_single_use(&context, pool, &temp_buffer, queue);
+    vulkan_buffer_destroy(&context, &staging);
+
+    t->generation++;
+}
+
+void vulkan_renderer_cubemap_destroy(texture* texture) {
+    vulkan_renderer_texture_destroy(texture);  // Same cleanup as regular textures
+}
+
 VkFormat channel_count_to_format(u8 channel_count, VkFormat default_format) {
     switch (channel_count) {
         case 1:

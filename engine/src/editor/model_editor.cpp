@@ -19,6 +19,7 @@ extern "C" {
 #include "math/kmath.h"
 #include "systems/geometry_system.h"
 #include "systems/resource_system.h"
+#include "systems/skybox_system.h"
 #include "resources/resource_types.h"
 }
 
@@ -34,6 +35,8 @@ extern "C" {
 // Maximum available models
 #define MAX_AVAILABLE_MODELS 256
 #define MODEL_NAME_MAX_LENGTH 256
+#define MAX_AVAILABLE_SKYBOXES 64
+#define SKYBOX_NAME_MAX_LENGTH 128
 
 // Editor state
 typedef struct model_editor_state {
@@ -65,6 +68,12 @@ typedef struct model_editor_state {
     b8 models_panel_open;
     b8 transform_panel_open;
     b8 camera_panel_open;
+    b8 skybox_panel_open;
+
+    // Skybox list
+    char available_skyboxes[MAX_AVAILABLE_SKYBOXES][SKYBOX_NAME_MAX_LENGTH];
+    u32 skybox_count;
+    i32 selected_skybox_index;
 } model_editor_state;
 
 static model_editor_state state = {};
@@ -73,8 +82,10 @@ static model_editor_state state = {};
 static void render_models_panel(void);
 static void render_transform_panel(void);
 static void render_camera_panel(void);
+static void render_skybox_panel(void);
 static void sync_transform_from_mesh(void);
 static void apply_transform_to_mesh(void);
+static void scan_skyboxes(void);
 
 b8 model_editor_initialize(model_editor_config config) {
     if (state.initialized) {
@@ -101,9 +112,16 @@ b8 model_editor_initialize(model_editor_config config) {
     state.models_panel_open = true;
     state.transform_panel_open = true;
     state.camera_panel_open = true;
+    state.skybox_panel_open = true;
+
+    state.skybox_count = 0;
+    state.selected_skybox_index = -1;
 
     // Scan for available models
     model_editor_scan_models();
+
+    // Scan for available skyboxes
+    scan_skyboxes();
 
     state.initialized = true;
     KINFO("Model editor initialized.");
@@ -130,6 +148,7 @@ void model_editor_render(void) {
             ImGui::MenuItem("Models Panel", nullptr, &state.models_panel_open);
             ImGui::MenuItem("Transform Panel", nullptr, &state.transform_panel_open);
             ImGui::MenuItem("Camera Panel", nullptr, &state.camera_panel_open);
+            ImGui::MenuItem("Skybox Panel", nullptr, &state.skybox_panel_open);
             ImGui::Separator();
             ImGui::MenuItem("ImGui Demo", nullptr, &state.show_demo_window);
             ImGui::EndMenu();
@@ -153,6 +172,10 @@ void model_editor_render(void) {
 
     if (state.camera_panel_open) {
         render_camera_panel();
+    }
+
+    if (state.skybox_panel_open) {
+        render_skybox_panel();
     }
 }
 
@@ -534,4 +557,127 @@ static void apply_transform_to_mesh(void) {
 
     // Set scale
     transform_set_scale(t, state.edit_scale);
+}
+
+static void scan_skyboxes(void) {
+    state.skybox_count = 0;
+
+#ifdef PLATFORM_WINDOWS
+    // Scan for skybox directories in assets/skyboxes
+    char search_path[512];
+    std::snprintf(search_path, sizeof(search_path), "..\\assets\\skyboxes\\*");
+
+    WIN32_FIND_DATAA find_data;
+    HANDLE find_handle = FindFirstFileA(search_path, &find_data);
+
+    if (find_handle == INVALID_HANDLE_VALUE) {
+        KWARN("No skyboxes directory found or empty.");
+        return;
+    }
+
+    do {
+        // Skip . and ..
+        if (find_data.cFileName[0] == '.') {
+            continue;
+        }
+
+        // Only include directories
+        if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            // Verify it's a valid skybox by checking for at least one face image
+            char check_path[512];
+            std::snprintf(check_path, sizeof(check_path), "..\\assets\\skyboxes\\%s\\right.png", find_data.cFileName);
+
+            DWORD attribs = GetFileAttributesA(check_path);
+            if (attribs == INVALID_FILE_ATTRIBUTES) {
+                // Try other extensions
+                std::snprintf(check_path, sizeof(check_path), "..\\assets\\skyboxes\\%s\\right.jpg", find_data.cFileName);
+                attribs = GetFileAttributesA(check_path);
+            }
+            if (attribs == INVALID_FILE_ATTRIBUTES) {
+                std::snprintf(check_path, sizeof(check_path), "..\\assets\\skyboxes\\%s\\right.tga", find_data.cFileName);
+                attribs = GetFileAttributesA(check_path);
+            }
+
+            if (attribs != INVALID_FILE_ATTRIBUTES) {
+                // Valid skybox directory found
+                u64 name_len = strlen(find_data.cFileName);
+                if (name_len < SKYBOX_NAME_MAX_LENGTH && state.skybox_count < MAX_AVAILABLE_SKYBOXES) {
+                    kzero_memory(state.available_skyboxes[state.skybox_count], SKYBOX_NAME_MAX_LENGTH);
+                    kcopy_memory(state.available_skyboxes[state.skybox_count], find_data.cFileName, name_len);
+                    state.skybox_count++;
+                }
+            }
+        }
+    } while (FindNextFileA(find_handle, &find_data));
+
+    FindClose(find_handle);
+#endif
+
+    KINFO("Found %d available skyboxes.", state.skybox_count);
+}
+
+static void render_skybox_panel(void) {
+    ImGui::SetNextWindowSize(ImVec2(300, 250), ImGuiCond_FirstUseEver);
+
+    if (ImGui::Begin("Skybox", &state.skybox_panel_open)) {
+        // Scan button
+        if (ImGui::Button("Refresh Skybox List")) {
+            scan_skyboxes();
+        }
+
+        ImGui::Separator();
+
+        // Current skybox status
+        const char* current_name = skybox_system_get_current_name();
+        if (skybox_system_is_loaded()) {
+            ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Loaded: %s", current_name);
+        } else {
+            ImGui::TextDisabled("No skybox loaded");
+        }
+
+        ImGui::Separator();
+        ImGui::Text("Available Skyboxes (%d):", state.skybox_count);
+
+        // Available skyboxes list
+        if (ImGui::BeginListBox("##available_skyboxes", ImVec2(-FLT_MIN, 100))) {
+            for (u32 i = 0; i < state.skybox_count; ++i) {
+                bool is_selected = (state.selected_skybox_index == (i32)i);
+
+                // Mark currently loaded skybox
+                char label[256];
+                if (skybox_system_is_loaded() && strcmp(state.available_skyboxes[i], current_name) == 0) {
+                    std::snprintf(label, sizeof(label), "%s (Active)", state.available_skyboxes[i]);
+                } else {
+                    std::snprintf(label, sizeof(label), "%s", state.available_skyboxes[i]);
+                }
+
+                if (ImGui::Selectable(label, is_selected)) {
+                    state.selected_skybox_index = i;
+                }
+            }
+            ImGui::EndListBox();
+        }
+
+        // Load/Unload buttons
+        if (state.selected_skybox_index >= 0 && state.selected_skybox_index < (i32)state.skybox_count) {
+            if (ImGui::Button("Load Selected Skybox")) {
+                if (skybox_system_load(state.available_skyboxes[state.selected_skybox_index])) {
+                    KINFO("Skybox '%s' loaded via editor.", state.available_skyboxes[state.selected_skybox_index]);
+                }
+            }
+        }
+
+        ImGui::SameLine();
+
+        if (skybox_system_is_loaded()) {
+            if (ImGui::Button("Unload Skybox")) {
+                skybox_system_unload();
+                KINFO("Skybox unloaded via editor.");
+            }
+        }
+
+        ImGui::Separator();
+        ImGui::TextWrapped("Note: Skyboxes are stored in assets/skyboxes/<name>/ with face images named: right, left, top, bottom, front, back (.png/.jpg/.tga)");
+    }
+    ImGui::End();
 }

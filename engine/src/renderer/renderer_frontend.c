@@ -11,6 +11,7 @@
 #include "systems/texture_system.h"
 #include "systems/material_system.h"
 #include "systems/shader_system.h"
+#include "systems/skybox_system.h"
 #include "systems/imgui_system.h"
 
 // TODO: temporary
@@ -31,6 +32,7 @@ typedef struct renderer_system_state {
     f32 far_clip;
     u32 material_shader_id;
     u32 ui_shader_id;
+    u32 skybox_shader_id;
     u32 render_mode;
     // The number of render targets. Typically lines up with the amount of swapchain images.
     u8 window_render_target_count;
@@ -180,6 +182,21 @@ b8 renderer_system_initialize(u64* memory_requirement, void* state, const char* 
     resource_system_unload(&config_resource);
     state_ptr->ui_shader_id = shader_system_get_id(BUILTIN_SHADER_NAME_UI);
 
+    // Builtin Skybox shader.
+    if (resource_system_load(BUILTIN_SHADER_NAME_SKYBOX, RESOURCE_TYPE_SHADER, &config_resource)) {
+        config = (shader_config*)config_resource.data;
+        if (shader_system_create(config)) {
+            state_ptr->skybox_shader_id = shader_system_get_id(BUILTIN_SHADER_NAME_SKYBOX);
+        } else {
+            KWARN("Failed to create skybox shader. Skybox will not be available.");
+            state_ptr->skybox_shader_id = INVALID_ID;
+        }
+        resource_system_unload(&config_resource);
+    } else {
+        KWARN("Failed to load skybox shader config. Skybox will not be available.");
+        state_ptr->skybox_shader_id = INVALID_ID;
+    }
+
     // World projection/view
     state_ptr->near_clip = 0.1f;
     state_ptr->far_clip = 1000.0f;
@@ -265,6 +282,9 @@ b8 renderer_draw_frame(render_packet* packet) {
             KERROR("backend.begin_renderpass -> BUILTIN_RENDERPASS_WORLD failed. Application shutting down...");
             return false;
         }
+
+        // Render skybox first (drawn behind everything due to depth test settings)
+        skybox_system_render(state_ptr->projection, state_ptr->view, state_ptr->backend.frame_number);
 
         if (!shader_system_use_by_id(state_ptr->material_shader_id)) {
             KERROR("Failed to use material shader. Render frame failed.");
@@ -399,6 +419,14 @@ void renderer_texture_destroy(struct texture* texture) {
     state_ptr->backend.texture_destroy(texture);
 }
 
+void renderer_cubemap_create(const u8** face_pixels, struct texture* texture) {
+    state_ptr->backend.cubemap_create(face_pixels, texture);
+}
+
+void renderer_cubemap_destroy(struct texture* texture) {
+    state_ptr->backend.cubemap_destroy(texture);
+}
+
 void renderer_texture_create_writeable(texture* t) {
     state_ptr->backend.texture_create_writeable(t);
 }
@@ -489,6 +517,10 @@ void renderer_renderpass_create(renderpass* out_renderpass, f32 depth, u32 stenc
 
 void renderer_renderpass_destroy(renderpass* pass) {
     state_ptr->backend.renderpass_destroy(pass);
+}
+
+void renderer_draw_geometry(geometry_render_data data) {
+    state_ptr->backend.draw_geometry(data);
 }
 
 void regenerate_render_targets() {
