@@ -18,6 +18,9 @@
 #include <vulkan/vulkan_win32.h>
 #include "renderer/vulkan/vulkan_types.inl"
 
+// ImGui system for message handling
+#include "systems/imgui_system.h"
+
 typedef struct platform_state {
     HINSTANCE h_instance;
     HWND hwnd;
@@ -228,7 +231,19 @@ b8 platform_create_vulkan_surface(vulkan_context *context) {
     return true;
 }
 
+void* platform_get_hwnd(void) {
+    if (state_ptr) {
+        return state_ptr->hwnd;
+    }
+    return 0;
+}
+
 LRESULT CALLBACK win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARAM l_param) {
+    // Let ImGui process the message first
+    if (imgui_process_win32_message(hwnd, msg, w_param, l_param)) {
+        return 1;
+    }
+
     switch (msg) {
         case WM_ERASEBKGND:
             // Notify the OS that erasing will be handled by the application to prevent flicker.

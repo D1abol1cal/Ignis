@@ -1982,3 +1982,7 @@ texture* vulkan_renderer_depth_attachment_get() {
 u8 vulkan_renderer_window_attachment_index_get() {
     return (u8)context.image_index;
 }
+
+vulkan_context* vulkan_get_context(void) {
+    return &context;
+}

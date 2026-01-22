@@ -20,6 +20,10 @@
 #include "systems/geometry_system.h"
 #include "systems/resource_system.h"
 #include "systems/shader_system.h"
+#include "systems/imgui_system.h"
+
+// editor
+#include "editor/model_editor.h"
 
 // TODO: temp
 #include "math/kmath.h"
@@ -367,6 +371,24 @@ b8 application_create(game* game_inst) {
     // app_state->test_geometry = geometry_system_get_default();
     // TODO: end temp
 
+    // Initialize ImGui system.
+    if (!imgui_system_initialize()) {
+        KFATAL("Failed to initialize ImGui system. Application cannot continue.");
+        return false;
+    }
+
+    // Initialize model editor.
+    model_editor_config editor_config = {};
+    editor_config.meshes = app_state->meshes;
+    editor_config.mesh_count = &app_state->mesh_count;
+    editor_config.max_mesh_count = 10;  // Matches the meshes array size
+    editor_config.camera_position = 0;  // Optional - will be set by game layer if needed
+    editor_config.camera_euler = 0;     // Optional - will be set by game layer if needed
+    editor_config.background_color = 0; // Optional - will be set by game layer if needed
+    if (!model_editor_initialize(editor_config)) {
+        KWARN("Failed to initialize model editor. Continuing without editor.");
+    }
+
     // Initialize the game.
     if (!app_state->game_inst->initialize(app_state->game_inst)) {
         KFATAL("Game failed to initialize.");
@@ -402,6 +424,12 @@ b8 application_run() {
             f64 delta = (current_time - app_state->last_time);
             f64 frame_start_time = platform_get_absolute_time();
 
+            // Start ImGui frame
+            imgui_system_begin_frame();
+
+            // Render model editor UI
+            model_editor_render();
+
             if (!app_state->game_inst->update(app_state->game_inst, (f32)delta)) {
                 KFATAL("Game update failed, shutting down.");
                 app_state->is_running = false;
@@ -414,6 +442,9 @@ b8 application_run() {
                 app_state->is_running = false;
                 break;
             }
+
+            // End ImGui frame (prepares draw data for rendering)
+            imgui_system_end_frame();
 
             // TODO: refactor packet creation
             render_packet packet = {};
@@ -509,6 +540,12 @@ b8 application_run() {
     // TODO: end temp
 
     input_system_shutdown(app_state->input_system_state);
+
+    // Shutdown model editor before ImGui
+    model_editor_shutdown();
+
+    // Shutdown ImGui system before renderer
+    imgui_system_shutdown();
 
     geometry_system_shutdown(app_state->geometry_system_state);
 

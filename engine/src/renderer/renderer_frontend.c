@@ -11,6 +11,7 @@
 #include "systems/texture_system.h"
 #include "systems/material_system.h"
 #include "systems/shader_system.h"
+#include "systems/imgui_system.h"
 
 // TODO: temporary
 #include "core/kstring.h"
@@ -279,6 +280,11 @@ b8 renderer_draw_frame(render_packet* packet) {
         // Draw geometries.
         u32 count = packet->geometry_count;
         for (u32 i = 0; i < count; ++i) {
+            // Skip null geometries
+            if (!packet->geometries[i].geometry) {
+                continue;
+            }
+
             material* m = 0;
             if (packet->geometries[i].geometry->material) {
                 m = packet->geometries[i].geometry->material;
@@ -331,6 +337,11 @@ b8 renderer_draw_frame(render_packet* packet) {
         // Draw ui geometries.
         count = packet->ui_geometry_count;
         for (u32 i = 0; i < count; ++i) {
+            // Skip null geometries
+            if (!packet->ui_geometries[i].geometry) {
+                continue;
+            }
+
             material* m = 0;
             if (packet->ui_geometries[i].geometry->material) {
                 m = packet->ui_geometries[i].geometry->material;
@@ -353,6 +364,9 @@ b8 renderer_draw_frame(render_packet* packet) {
             // Draw it.
             state_ptr->backend.draw_geometry(packet->ui_geometries[i]);
         }
+
+        // Render ImGui draw commands (on top of UI)
+        imgui_system_render();
 
         if (!state_ptr->backend.end_renderpass(&state_ptr->backend, state_ptr->ui_renderpass)) {
             KERROR("backend.end_renderpass -> BUILTIN_RENDERPASS_UI failed. Application shutting down...");

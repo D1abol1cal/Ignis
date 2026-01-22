@@ -62,3 +62,13 @@ void vulkan_renderer_render_target_destroy(render_target* target, b8 free_intern
 texture* vulkan_renderer_window_attachment_get(u8 index);
 texture* vulkan_renderer_depth_attachment_get();
 u8 vulkan_renderer_window_attachment_index_get();
+
+// Forward declaration for ImGui integration
+struct vulkan_context;
+
+/**
+ * @brief Get a pointer to the global Vulkan context.
+ * Used by ImGui system for Vulkan integration.
+ * @returns Pointer to the vulkan_context structure.
+ */
+struct vulkan_context* vulkan_get_context(void);

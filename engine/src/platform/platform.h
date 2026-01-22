@@ -128,7 +128,15 @@ f64 platform_get_absolute_time();
  * @brief Sleep on the thread for the provided milliseconds. This blocks the main thread.
  * Should only be used for giving time back to the OS for unused update power.
  * Therefore it is not exported. Times are approximate.
- * 
+ *
  * @param ms The number of milliseconds to sleep for.
  */
 void platform_sleep(u64 ms);
+
+/**
+ * @brief Gets the platform window handle.
+ * On Windows, this returns the HWND.
+ *
+ * @return A pointer to the native window handle, or NULL if not available.
+ */
+KAPI void* platform_get_hwnd(void);

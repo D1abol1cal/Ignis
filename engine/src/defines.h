@@ -55,7 +55,11 @@ typedef double f64;
 typedef int b32;
 
 /** @brief 8-bit boolean type */
+#ifdef __cplusplus
+typedef bool b8;
+#else
 typedef _Bool b8;
+#endif
 
 /** @brief A range, typically of memory */
 typedef struct range {

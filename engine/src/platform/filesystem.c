@@ -91,7 +91,7 @@ b8 filesystem_write_line(file_handle* handle, const char* text) {
 }
 
 b8 filesystem_read(file_handle* handle, u64 data_size, void* out_data, u64* out_bytes_read) {
-    if (handle->handle && out_data) {
+    if (handle && handle->handle && out_data && out_bytes_read) {
         *out_bytes_read = fread(out_data, 1, data_size, (FILE*)handle->handle);
         if (*out_bytes_read != data_size) {
             return false;
