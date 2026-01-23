@@ -57,7 +57,8 @@ b8 vulkan_graphics_pipeline_create(
     if (depth_test_enabled) {
         depth_stencil.depthTestEnable = VK_TRUE;
         depth_stencil.depthWriteEnable = VK_TRUE;
-        depth_stencil.depthCompareOp = VK_COMPARE_OP_LESS;
+        // Use LESS_OR_EQUAL to allow skybox at z=1.0 (far plane) to pass
+        depth_stencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
         depth_stencil.depthBoundsTestEnable = VK_FALSE;
         depth_stencil.stencilTestEnable = VK_FALSE;
     }

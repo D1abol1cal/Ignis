@@ -42,7 +42,7 @@ static skybox_state* state_ptr = 0;
 
 // Forward declarations
 static b8 load_cubemap_faces(const char* skybox_path, u8** out_face_pixels, u32* out_width, u32* out_height, u8* out_channels);
-static void free_face_pixels(u8** face_pixels);
+static void free_face_pixels(u8** face_pixels, u32 width, u32 height, u8 channels);
 static b8 create_skybox_cube(void);
 
 b8 skybox_system_initialize(u64* memory_requirement, void* state, skybox_system_config config) {
@@ -162,7 +162,7 @@ b8 skybox_system_load(const char* name) {
     renderer_cubemap_create((const u8**)face_pixels, &state_ptr->cubemap_texture);
 
     // Free face pixel data
-    free_face_pixels(face_pixels);
+    free_face_pixels(face_pixels, width, height, channels);
 
     // Set up the texture map for the cubemap
     state_ptr->cubemap_map.texture = &state_ptr->cubemap_texture;
@@ -241,6 +241,9 @@ void skybox_system_render(mat4 projection, mat4 view, u64 render_frame_number) {
         return;
     }
 
+    // Debug: Log that we're rendering (comment out after confirming)
+    // KTRACE("Skybox rendering...");
+
     // Use the skybox shader
     if (!shader_system_use_by_id(state_ptr->shader_id)) {
         KERROR("Failed to use skybox shader.");
@@ -309,7 +312,10 @@ static b8 load_cubemap_faces(const char* skybox_name, u8** out_face_pixels, u32*
         resource img_resource;
         if (!resource_system_load(resource_name, RESOURCE_TYPE_IMAGE, &img_resource)) {
             KERROR("Failed to load skybox face '%s' for skybox '%s'.", face_names[i], skybox_name);
-            free_face_pixels(out_face_pixels);
+            // Only free if we have loaded at least one face (i > 0 means we have dimensions)
+            if (i > 0) {
+                free_face_pixels(out_face_pixels, *out_width, *out_height, *out_channels);
+            }
             return false;
         }
 
@@ -324,7 +330,7 @@ static b8 load_cubemap_faces(const char* skybox_name, u8** out_face_pixels, u32*
             if (img->width != *out_width || img->height != *out_height) {
                 KERROR("Skybox face '%s' has different dimensions than other faces.", face_names[i]);
                 resource_system_unload(&img_resource);
-                free_face_pixels(out_face_pixels);
+                free_face_pixels(out_face_pixels, *out_width, *out_height, *out_channels);
                 return false;
             }
         }
@@ -340,62 +346,62 @@ static b8 load_cubemap_faces(const char* skybox_name, u8** out_face_pixels, u32*
     return true;
 }
 
-static void free_face_pixels(u8** face_pixels) {
+static void free_face_pixels(u8** face_pixels, u32 width, u32 height, u8 channels) {
+    u32 size = width * height * channels;
     for (u32 i = 0; i < 6; i++) {
         if (face_pixels[i]) {
-            // Note: We don't know the exact size here, so we rely on the allocator
-            // tracking. This is a simplification.
-            kfree(face_pixels[i], 0, MEMORY_TAG_TEXTURE);
+            kfree(face_pixels[i], size, MEMORY_TAG_TEXTURE);
             face_pixels[i] = 0;
         }
     }
 }
 
 static b8 create_skybox_cube(void) {
-    // Create a unit cube (vertices only, no normals/texcoords needed for skybox)
+    // Create a unit cube for skybox (viewed from inside, so faces wound inward)
+    // Each face has 2 triangles, vertices wound counter-clockwise when viewed from inside
     f32 vertices[] = {
-        // Back face
+        // Back face (looking toward -Z from inside)
         -1.0f, -1.0f, -1.0f,
-         1.0f,  1.0f, -1.0f,
          1.0f, -1.0f, -1.0f,
          1.0f,  1.0f, -1.0f,
+         1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+        -1.0f, -1.0f, -1.0f,
+        // Front face (looking toward +Z from inside)
+        -1.0f, -1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f, -1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+        -1.0f, -1.0f,  1.0f,
+        -1.0f,  1.0f,  1.0f,
+        // Left face (looking toward -X from inside)
         -1.0f, -1.0f, -1.0f,
         -1.0f,  1.0f, -1.0f,
-        // Front face
+        -1.0f,  1.0f,  1.0f,
+        -1.0f,  1.0f,  1.0f,
         -1.0f, -1.0f,  1.0f,
+        -1.0f, -1.0f, -1.0f,
+        // Right face (looking toward +X from inside)
+         1.0f, -1.0f, -1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f, -1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f, -1.0f, -1.0f,
          1.0f, -1.0f,  1.0f,
+        // Bottom face (looking toward -Y from inside)
+        -1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f,  1.0f,
+        -1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f,
+        // Top face (looking toward +Y from inside)
+        -1.0f,  1.0f, -1.0f,
+         1.0f,  1.0f, -1.0f,
          1.0f,  1.0f,  1.0f,
          1.0f,  1.0f,  1.0f,
         -1.0f,  1.0f,  1.0f,
-        -1.0f, -1.0f,  1.0f,
-        // Left face
-        -1.0f,  1.0f,  1.0f,
-        -1.0f,  1.0f, -1.0f,
-        -1.0f, -1.0f, -1.0f,
-        -1.0f, -1.0f, -1.0f,
-        -1.0f, -1.0f,  1.0f,
-        -1.0f,  1.0f,  1.0f,
-        // Right face
-         1.0f,  1.0f,  1.0f,
-         1.0f, -1.0f, -1.0f,
-         1.0f,  1.0f, -1.0f,
-         1.0f, -1.0f, -1.0f,
-         1.0f,  1.0f,  1.0f,
-         1.0f, -1.0f,  1.0f,
-        // Bottom face
-        -1.0f, -1.0f, -1.0f,
-         1.0f, -1.0f, -1.0f,
-         1.0f, -1.0f,  1.0f,
-         1.0f, -1.0f,  1.0f,
-        -1.0f, -1.0f,  1.0f,
-        -1.0f, -1.0f, -1.0f,
-        // Top face
-        -1.0f,  1.0f, -1.0f,
-         1.0f,  1.0f,  1.0f,
-         1.0f,  1.0f, -1.0f,
-         1.0f,  1.0f,  1.0f,
-        -1.0f,  1.0f, -1.0f,
-        -1.0f,  1.0f,  1.0f
+        -1.0f,  1.0f, -1.0f
     };
 
     geometry_config config;
