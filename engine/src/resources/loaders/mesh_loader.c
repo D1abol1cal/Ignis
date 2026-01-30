@@ -50,7 +50,7 @@ b8 load_ksm_file(file_handle* ksm_file, geometry_config** out_geometries_darray)
 b8 write_ksm_file(const char* path, const char* name, u32 geometry_count, geometry_config* geometries);
 b8 write_kmt_file(const char* directory, material_config* config);
 
-b8 mesh_loader_load(struct resource_loader* self, const char* name, resource* out_resource) {
+b8 mesh_loader_load(struct resource_loader* self, const char* name, void* params, resource* out_resource) {
     if (!self || !name || !out_resource) {
         return false;
     }
@@ -811,7 +811,7 @@ b8 import_obj_material_library_file(const char* mtl_file_path) {
 }
 
 /**
- * @brief Write out a kohi material file from config. This gets loaded by name later when the mesh
+ * @brief Write out a Ignis material file from config. This gets loaded by name later when the mesh
  * is requested for load.
  *
  * @param mtl_file_path The filepath of the material library file which originally contained the material definition.

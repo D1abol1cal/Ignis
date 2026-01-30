@@ -3,9 +3,9 @@
  * @author your name (you@domain.com)
  * @brief This file contains a free list, used for custom memory allocation tracking.
  * @version 0.1
- * @date 2022-01-12
+ * @date 2026-01-12
  * 
- * @copyright Copyright (c) 2022
+ * @copyright Copyright (c) 2026
  * 
  */
 

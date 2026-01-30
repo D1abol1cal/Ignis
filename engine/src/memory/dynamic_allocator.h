@@ -3,7 +3,7 @@
  * @author Syed Nofel Talha (syednofeltalha2@gmail.com)
  * @brief Contains the implementation of the dynamic allocator.
  * @version 1.0
- * @date 2022-01-25
+ * @date 2026-01-25
  * 
  * @copyright Ignis Game Engine is Copyright (c) Syed Nofel Talha 2025-2026
  * 

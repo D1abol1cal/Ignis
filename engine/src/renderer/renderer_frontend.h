@@ -5,7 +5,7 @@
  * This is responsible for transferring any data to and from the renderer backend in an
  * agnostic way.
  * @version 1.0
- * @date 2022-01-11
+ * @date 2026-01-11
  *
  * @copyright Ignis Game Engine is Copyright (c) Syed Nofel Talha 2025-2026
  *
@@ -52,15 +52,6 @@ void renderer_on_resized(u16 width, u16 height);
  * @return True on success; otherwise false.
  */
 b8 renderer_draw_frame(render_packet* packet);
-
-/**
- * @brief Sets the view matrix in the renderer. NOTE: exposed to public API.
- *
- * @deprecated HACK: this should not be exposed outside the engine.
- * @param view The view matrix to be set.
- * @param view_position The view position to be set.
- */
-KAPI void renderer_set_view(mat4 view, vec3 view_position);
 
 /**
  * @brief Creates a new texture.
@@ -127,6 +118,30 @@ b8 renderer_create_geometry(geometry* geometry, u32 vertex_size, u32 vertex_coun
 void renderer_destroy_geometry(geometry* geometry);
 
 /**
+ * @brief Draws the given geometry. Should only be called inside a renderpass, within a frame.
+ *
+ * @param data The render data of the geometry to be drawn.
+ */
+void renderer_draw_geometry(geometry_render_data* data);
+
+/**
+ * @brief Begins the given renderpass.
+ *
+ * @param pass A pointer to the renderpass to begin.
+ * @param target A pointer to the render target to be used.
+ * @return True on success; otherwise false.
+ */
+b8 renderer_renderpass_begin(renderpass* pass, render_target* target);
+
+/**
+ * @brief Ends the given renderpass.
+ *
+ * @param pass A pointer to the renderpass to end.
+ * @return True on success; otherwise false.
+ */
+b8 renderer_renderpass_end(renderpass* pass);
+
+/**
  * @brief Obtains a pointer to the renderpass with the given name.
  *
  * @param name The name of the renderpass whose identifier to obtain.
@@ -138,13 +153,14 @@ renderpass* renderer_renderpass_get(const char* name);
  * @brief Creates internal shader resources using the provided parameters.
  * 
  * @param s A pointer to the shader.
+ * @param config A constant pointer to the shader config.
  * @param pass A pointer to the renderpass to be associated with the shader.
  * @param stage_count The total number of stages.
  * @param stage_filenames An array of shader stage filenames to be loaded. Should align with stages array.
  * @param stages A array of shader_stages indicating what render stages (vertex, fragment, etc.) used in this shader.
  * @return b8 True on success; otherwise false.
  */
-b8 renderer_shader_create(struct shader* s, renderpass* pass, u8 stage_count, const char** stage_filenames, shader_stage* stages);
+b8 renderer_shader_create(struct shader* s, const shader_config* config, renderpass* pass, u8 stage_count, const char** stage_filenames, shader_stage* stages);
 
 /**
  * @brief Destroys the given shader and releases any resources held by it.

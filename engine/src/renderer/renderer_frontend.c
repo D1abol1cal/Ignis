@@ -11,6 +11,8 @@
 #include "systems/texture_system.h"
 #include "systems/material_system.h"
 #include "systems/shader_system.h"
+#include "systems/camera_system.h"
+#include "systems/render_view_system.h"
 
 // TODO: temporary
 #include "core/kstring.h"
@@ -20,17 +22,9 @@
 
 typedef struct renderer_system_state {
     renderer_backend backend;
-    mat4 projection;
-    mat4 view;
-    vec4 ambient_colour;
-    vec3 view_position;
-    mat4 ui_projection;
-    mat4 ui_view;
-    f32 near_clip;
-    f32 far_clip;
+    u32 skybox_shader_id;
     u32 material_shader_id;
     u32 ui_shader_id;
-    u32 render_mode;
     // The number of render targets. Typically lines up with the amount of swapchain images.
     u8 window_render_target_count;
     // The current window framebuffer width.
@@ -38,6 +32,8 @@ typedef struct renderer_system_state {
     // The current window framebuffer height.
     u32 framebuffer_height;
 
+    // A pointer to the skybox renderpass. TODO: Configurable via views.
+    renderpass* skybox_renderpass;
     // A pointer to the world renderpass. TODO: Configurable via views.
     renderpass* world_renderpass;
     // A pointer to the UI renderpass. TODO: Configurable via views.
@@ -52,33 +48,6 @@ typedef struct renderer_system_state {
 static renderer_system_state* state_ptr;
 
 void regenerate_render_targets();
-
-b8 renderer_on_event(u16 code, void* sender, void* listener_inst, event_context context) {
-    switch (code) {
-        case EVENT_CODE_SET_RENDER_MODE: {
-            renderer_system_state* state = (renderer_system_state*)listener_inst;
-            i32 mode = context.data.i32[0];
-            switch (mode) {
-                default:
-                case RENDERER_VIEW_MODE_DEFAULT:
-                    KDEBUG("Renderer mode set to default.");
-                    state->render_mode = RENDERER_VIEW_MODE_DEFAULT;
-                    break;
-                case RENDERER_VIEW_MODE_LIGHTING:
-                    KDEBUG("Renderer mode set to lighting.");
-                    state->render_mode = RENDERER_VIEW_MODE_LIGHTING;
-                    break;
-                case RENDERER_VIEW_MODE_NORMALS:
-                    KDEBUG("Renderer mode set to normals.");
-                    state->render_mode = RENDERER_VIEW_MODE_NORMALS;
-                    break;
-            }
-            return true;
-        }
-    }
-
-    return false;
-}
 
 #define CRITICAL_INIT(op, msg) \
     if (!op) {                 \
@@ -102,32 +71,37 @@ b8 renderer_system_initialize(u64* memory_requirement, void* state, const char* 
     // TODO: make this configurable.
     renderer_backend_create(RENDERER_BACKEND_TYPE_VULKAN, &state_ptr->backend);
     state_ptr->backend.frame_number = 0;
-    state_ptr->render_mode = RENDERER_VIEW_MODE_DEFAULT;
-
-    event_register(EVENT_CODE_SET_RENDER_MODE, state, renderer_on_event);
 
     renderer_backend_config renderer_config = {};
     renderer_config.application_name = application_name;
     renderer_config.on_rendertarget_refresh_required = regenerate_render_targets;
 
     // Renderpasses. TODO: read config from file.
-    renderer_config.renderpass_count = 2;
+    renderer_config.renderpass_count = 3;
+    const char* skybox_renderpass_name = "Renderpass.Builtin.Skybox";
     const char* world_renderpass_name = "Renderpass.Builtin.World";
     const char* ui_renderpass_name = "Renderpass.Builtin.UI";
-    renderpass_config pass_configs[2];
-    pass_configs[0].name = world_renderpass_name;
+    renderpass_config pass_configs[3];
+    pass_configs[0].name = skybox_renderpass_name;
     pass_configs[0].prev_name = 0;
-    pass_configs[0].next_name = ui_renderpass_name;
+    pass_configs[0].next_name = world_renderpass_name;
     pass_configs[0].render_area = (vec4){0, 0, 1280, 720};
     pass_configs[0].clear_colour = (vec4){0.0f, 0.0f, 0.2f, 1.0f};
-    pass_configs[0].clear_flags = RENDERPASS_CLEAR_COLOUR_BUFFER_FLAG | RENDERPASS_CLEAR_DEPTH_BUFFER_FLAG | RENDERPASS_CLEAR_STENCIL_BUFFER_FLAG;
+    pass_configs[0].clear_flags = RENDERPASS_CLEAR_COLOUR_BUFFER_FLAG;
 
-    pass_configs[1].name = ui_renderpass_name;
-    pass_configs[1].prev_name = world_renderpass_name;
-    pass_configs[1].next_name = 0;
+    pass_configs[1].name = world_renderpass_name;
+    pass_configs[1].prev_name = skybox_renderpass_name;
+    pass_configs[1].next_name = ui_renderpass_name;
     pass_configs[1].render_area = (vec4){0, 0, 1280, 720};
     pass_configs[1].clear_colour = (vec4){0.0f, 0.0f, 0.2f, 1.0f};
-    pass_configs[1].clear_flags = RENDERPASS_CLEAR_NONE_FLAG;
+    pass_configs[1].clear_flags = RENDERPASS_CLEAR_DEPTH_BUFFER_FLAG | RENDERPASS_CLEAR_STENCIL_BUFFER_FLAG;
+
+    pass_configs[2].name = ui_renderpass_name;
+    pass_configs[2].prev_name = world_renderpass_name;
+    pass_configs[2].next_name = 0;
+    pass_configs[2].render_area = (vec4){0, 0, 1280, 720};
+    pass_configs[2].clear_colour = (vec4){0.0f, 0.0f, 0.2f, 1.0f};
+    pass_configs[2].clear_flags = RENDERPASS_CLEAR_NONE_FLAG;
 
     renderer_config.pass_configs = pass_configs;
 
@@ -135,6 +109,10 @@ b8 renderer_system_initialize(u64* memory_requirement, void* state, const char* 
     CRITICAL_INIT(state_ptr->backend.initialize(&state_ptr->backend, &renderer_config, &state_ptr->window_render_target_count), "Renderer backend failed to initialize. Shutting down.");
 
     // TODO: Will know how to get these when we define views.
+    state_ptr->skybox_renderpass = state_ptr->backend.renderpass_get(skybox_renderpass_name);
+    state_ptr->skybox_renderpass->render_target_count = state_ptr->window_render_target_count;
+    state_ptr->skybox_renderpass->targets = kallocate(sizeof(render_target) * state_ptr->window_render_target_count, MEMORY_TAG_ARRAY);
+
     state_ptr->world_renderpass = state_ptr->backend.renderpass_get(world_renderpass_name);
     state_ptr->world_renderpass->render_target_count = state_ptr->window_render_target_count;
     state_ptr->world_renderpass->targets = kallocate(sizeof(render_target) * state_ptr->window_render_target_count, MEMORY_TAG_ARRAY);
@@ -144,6 +122,12 @@ b8 renderer_system_initialize(u64* memory_requirement, void* state, const char* 
     state_ptr->ui_renderpass->targets = kallocate(sizeof(render_target) * state_ptr->window_render_target_count, MEMORY_TAG_ARRAY);
 
     regenerate_render_targets();
+
+    // Update the skybox renderpass dimensions.
+    state_ptr->skybox_renderpass->render_area.x = 0;
+    state_ptr->skybox_renderpass->render_area.y = 0;
+    state_ptr->skybox_renderpass->render_area.z = state_ptr->framebuffer_width;
+    state_ptr->skybox_renderpass->render_area.w = state_ptr->framebuffer_height;
 
     // Update the main/world renderpass dimensions.
     state_ptr->world_renderpass->render_area.x = 0;
@@ -161,9 +145,18 @@ b8 renderer_system_initialize(u64* memory_requirement, void* state, const char* 
     resource config_resource;
     shader_config* config = 0;
 
+    // Builtin skybox shader.
+    CRITICAL_INIT(
+        resource_system_load(BUILTIN_SHADER_NAME_SKYBOX, RESOURCE_TYPE_SHADER, 0, &config_resource),
+        "Failed to load builtin skybox shader.");
+    config = (shader_config*)config_resource.data;
+    CRITICAL_INIT(shader_system_create(config), "Failed to load builtin skybox shader.");
+    resource_system_unload(&config_resource);
+    state_ptr->skybox_shader_id = shader_system_get_id(BUILTIN_SHADER_NAME_SKYBOX);
+
     // Builtin material shader.
     CRITICAL_INIT(
-        resource_system_load(BUILTIN_SHADER_NAME_MATERIAL, RESOURCE_TYPE_SHADER, &config_resource),
+        resource_system_load(BUILTIN_SHADER_NAME_MATERIAL, RESOURCE_TYPE_SHADER, 0, &config_resource),
         "Failed to load builtin material shader.");
     config = (shader_config*)config_resource.data;
     CRITICAL_INIT(shader_system_create(config), "Failed to load builtin material shader.");
@@ -172,26 +165,12 @@ b8 renderer_system_initialize(u64* memory_requirement, void* state, const char* 
 
     // Builtin UI shader.
     CRITICAL_INIT(
-        resource_system_load(BUILTIN_SHADER_NAME_UI, RESOURCE_TYPE_SHADER, &config_resource),
+        resource_system_load(BUILTIN_SHADER_NAME_UI, RESOURCE_TYPE_SHADER, 0, &config_resource),
         "Failed to load builtin UI shader.");
     config = (shader_config*)config_resource.data;
     CRITICAL_INIT(shader_system_create(config), "Failed to load builtin UI shader.");
     resource_system_unload(&config_resource);
     state_ptr->ui_shader_id = shader_system_get_id(BUILTIN_SHADER_NAME_UI);
-
-    // World projection/view
-    state_ptr->near_clip = 0.1f;
-    state_ptr->far_clip = 1000.0f;
-    state_ptr->projection = mat4_perspective(deg_to_rad(45.0f), 1280 / 720.0f, state_ptr->near_clip, state_ptr->far_clip);
-    // TODO: configurable camera starting position.
-    state_ptr->view = mat4_translation((vec3){0, 0, -30.0f});
-    state_ptr->view = mat4_inverse(state_ptr->view);
-    // TODO: Obtain from scene
-    state_ptr->ambient_colour = (vec4){0.25f, 0.25f, 0.25f, 1.0f};
-
-    // UI projection/view
-    state_ptr->ui_projection = mat4_orthographic(0, 1280.0f, 720.0f, 0, -100.f, 100.0f);  // Intentionally flipped on y axis.
-    state_ptr->ui_view = mat4_inverse(mat4_identity());
 
     return true;
 }
@@ -200,6 +179,7 @@ void renderer_system_shutdown(void* state) {
     if (state_ptr) {
         // Destroy render targets.
         for (u8 i = 0; i < state_ptr->window_render_target_count; ++i) {
+            state_ptr->backend.render_target_destroy(&state_ptr->skybox_renderpass->targets[i], true);
             state_ptr->backend.render_target_destroy(&state_ptr->world_renderpass->targets[i], true);
             state_ptr->backend.render_target_destroy(&state_ptr->ui_renderpass->targets[i], true);
         }
@@ -234,8 +214,7 @@ b8 renderer_draw_frame(render_packet* packet) {
         if (state_ptr->frames_since_resize >= 30) {
             f32 width = state_ptr->framebuffer_width;
             f32 height = state_ptr->framebuffer_height;
-            state_ptr->projection = mat4_perspective(deg_to_rad(45.0f), width / (f32)height, state_ptr->near_clip, state_ptr->far_clip);
-            state_ptr->ui_projection = mat4_orthographic(0, (f32)width, (f32)height, 0, -100.f, 100.0f);  // Intentionally flipped on y axis.
+            render_view_system_on_window_resize(width, height);
             state_ptr->backend.resized(&state_ptr->backend, width, height);
 
             state_ptr->frames_since_resize = 0;
@@ -246,119 +225,17 @@ b8 renderer_draw_frame(render_packet* packet) {
         }
     }
 
-    // TODO: views
-    // Update the main/world renderpass dimensions.
-    state_ptr->world_renderpass->render_area.z = state_ptr->framebuffer_width;
-    state_ptr->world_renderpass->render_area.w = state_ptr->framebuffer_height;
-
-    // Also update the UI renderpass dimensions.
-    state_ptr->ui_renderpass->render_area.z = state_ptr->framebuffer_width;
-    state_ptr->ui_renderpass->render_area.w = state_ptr->framebuffer_height;
-
     // If the begin frame returned successfully, mid-frame operations may continue.
     if (state_ptr->backend.begin_frame(&state_ptr->backend, packet->delta_time)) {
         u8 attachment_index = state_ptr->backend.window_attachment_index_get();
 
-        // World renderpass
-        if (!state_ptr->backend.begin_renderpass(&state_ptr->backend, state_ptr->world_renderpass, &state_ptr->world_renderpass->targets[attachment_index])) {
-            KERROR("backend.begin_renderpass -> BUILTIN_RENDERPASS_WORLD failed. Application shutting down...");
-            return false;
-        }
-
-        if (!shader_system_use_by_id(state_ptr->material_shader_id)) {
-            KERROR("Failed to use material shader. Render frame failed.");
-            return false;
-        }
-
-        // Apply globals
-        if (!material_system_apply_global(state_ptr->material_shader_id, &state_ptr->projection, &state_ptr->view, &state_ptr->ambient_colour, &state_ptr->view_position, state_ptr->render_mode)) {
-            KERROR("Failed to use apply globals for material shader. Render frame failed.");
-            return false;
-        }
-
-        // Draw geometries.
-        u32 count = packet->geometry_count;
-        for (u32 i = 0; i < count; ++i) {
-            material* m = 0;
-            if (packet->geometries[i].geometry->material) {
-                m = packet->geometries[i].geometry->material;
-            } else {
-                m = material_system_get_default();
+        // Render each view.
+        for (u32 i = 0; i < packet->view_count; ++i) {
+            if (!render_view_system_on_render(packet->views[i].view, &packet->views[i], state_ptr->backend.frame_number, attachment_index)) {
+                KERROR("Error rendering view index %i.", i);
+                return false;
             }
-
-            // Apply the material if it hasn't already been this frame. This keeps the
-            // same material from being updated multiple times.
-            b8 needs_update = m->render_frame_number != state_ptr->backend.frame_number;
-            if (!material_system_apply_instance(m, needs_update)) {
-                KWARN("Failed to apply material '%s'. Skipping draw.", m->name);
-                continue;
-            } else {
-                // Sync the frame number.
-                m->render_frame_number = state_ptr->backend.frame_number;
-            }
-
-            // Apply the locals
-            material_system_apply_local(m, &packet->geometries[i].model);
-
-            // Draw it.
-            state_ptr->backend.draw_geometry(packet->geometries[i]);
         }
-
-        if (!state_ptr->backend.end_renderpass(&state_ptr->backend, state_ptr->world_renderpass)) {
-            KERROR("backend.end_renderpass -> BUILTIN_RENDERPASS_WORLD failed. Application shutting down...");
-            return false;
-        }
-        // End world renderpass
-
-        // UI renderpass
-        if (!state_ptr->backend.begin_renderpass(&state_ptr->backend, state_ptr->ui_renderpass, &state_ptr->ui_renderpass->targets[attachment_index])) {
-            KERROR("backend.begin_renderpass -> BUILTIN_RENDERPASS_UI failed. Application shutting down...");
-            return false;
-        }
-
-        // Update UI global state
-        if (!shader_system_use_by_id(state_ptr->ui_shader_id)) {
-            KERROR("Failed to use UI shader. Render frame failed.");
-            return false;
-        }
-
-        // Apply globals
-        if (!material_system_apply_global(state_ptr->ui_shader_id, &state_ptr->ui_projection, &state_ptr->ui_view, 0, 0, 0)) {
-            KERROR("Failed to use apply globals for UI shader. Render frame failed.");
-            return false;
-        }
-
-        // Draw ui geometries.
-        count = packet->ui_geometry_count;
-        for (u32 i = 0; i < count; ++i) {
-            material* m = 0;
-            if (packet->ui_geometries[i].geometry->material) {
-                m = packet->ui_geometries[i].geometry->material;
-            } else {
-                m = material_system_get_default();
-            }
-            // Apply the material
-            b8 needs_update = m->render_frame_number != state_ptr->backend.frame_number;
-            if (!material_system_apply_instance(m, needs_update)) {
-                KWARN("Failed to apply UI material '%s'. Skipping draw.", m->name);
-                continue;
-            } else {
-                // Sync the frame number.
-                m->render_frame_number = state_ptr->backend.frame_number;
-            }
-
-            // Apply the locals
-            material_system_apply_local(m, &packet->ui_geometries[i].model);
-
-            // Draw it.
-            state_ptr->backend.draw_geometry(packet->ui_geometries[i]);
-        }
-
-        if (!state_ptr->backend.end_renderpass(&state_ptr->backend, state_ptr->ui_renderpass)) {
-            KERROR("backend.end_renderpass -> BUILTIN_RENDERPASS_UI failed. Application shutting down...");
-            return false;
-        }
-        // End UI renderpass
 
         // End the frame. If this fails, it is likely unrecoverable.
         b8 result = state_ptr->backend.end_frame(&state_ptr->backend, packet->delta_time);
@@ -370,11 +247,6 @@ b8 renderer_draw_frame(render_packet* packet) {
     }
 
     return true;
-}
-
-void renderer_set_view(mat4 view, vec3 view_position) {
-    state_ptr->view = view;
-    state_ptr->view_position = view_position;
 }
 
 void renderer_texture_create(const u8* pixels, struct texture* texture) {
@@ -405,12 +277,24 @@ void renderer_destroy_geometry(geometry* geometry) {
     state_ptr->backend.destroy_geometry(geometry);
 }
 
+void renderer_draw_geometry(geometry_render_data* data) {
+    state_ptr->backend.draw_geometry(data);
+}
+
+b8 renderer_renderpass_begin(renderpass* pass, render_target* target) {
+    return state_ptr->backend.renderpass_begin(pass, target);
+}
+
+b8 renderer_renderpass_end(renderpass* pass) {
+    return state_ptr->backend.renderpass_end(pass);
+}
+
 renderpass* renderer_renderpass_get(const char* name) {
     return state_ptr->backend.renderpass_get(name);
 }
 
-b8 renderer_shader_create(shader* s, renderpass* pass, u8 stage_count, const char** stage_filenames, shader_stage* stages) {
-    return state_ptr->backend.shader_create(s, pass, stage_count, stage_filenames, stages);
+b8 renderer_shader_create(shader* s, const shader_config* config, renderpass* pass, u8 stage_count, const char** stage_filenames, shader_stage* stages) {
+    return state_ptr->backend.shader_create(s, config, pass, stage_count, stage_filenames, stages);
 }
 
 void renderer_shader_destroy(shader* s) {
@@ -481,11 +365,22 @@ void regenerate_render_targets() {
     // Create render targets for each. TODO: Should be configurable.
     for (u8 i = 0; i < state_ptr->window_render_target_count; ++i) {
         // Destroy the old first if they exist.
+        state_ptr->backend.render_target_destroy(&state_ptr->skybox_renderpass->targets[i], false);
         state_ptr->backend.render_target_destroy(&state_ptr->world_renderpass->targets[i], false);
         state_ptr->backend.render_target_destroy(&state_ptr->ui_renderpass->targets[i], false);
 
         texture* window_target_texture = state_ptr->backend.window_attachment_get(i);
         texture* depth_target_texture = state_ptr->backend.depth_attachment_get();
+
+        // Skybox render targets
+        texture* skybox_attachments[1] = {window_target_texture};
+        state_ptr->backend.render_target_create(
+            1,
+            skybox_attachments,
+            state_ptr->skybox_renderpass,
+            state_ptr->framebuffer_width,
+            state_ptr->framebuffer_height,
+            &state_ptr->skybox_renderpass->targets[i]);
 
         // World render targets.
         texture* attachments[2] = {window_target_texture, depth_target_texture};
@@ -506,6 +401,5 @@ void regenerate_render_targets() {
             state_ptr->framebuffer_width,
             state_ptr->framebuffer_height,
             &state_ptr->ui_renderpass->targets[i]);
-
     }
 }

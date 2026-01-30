@@ -10,3 +10,4 @@ MDs/
 assets/
 **/tmpclaude-*-cwd
 tmpclaude-*-cwd
+.claude/

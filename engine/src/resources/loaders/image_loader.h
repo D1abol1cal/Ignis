@@ -3,7 +3,7 @@
  * @author Syed Nofel Talha (syednofeltalha2@gmail.com)
  * @brief A resource loader that handles image resources.
  * @version 1.0
- * @date 2022-01-11
+ * @date 2026-01-11
  * 
  * @copyright Ignis Game Engine is Copyright (c) Syed Nofel Talha 2025-2026
  * 

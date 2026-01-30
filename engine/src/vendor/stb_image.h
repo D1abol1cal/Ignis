@@ -48,10 +48,10 @@ LICENSE
 
 RECENT REVISION HISTORY:
 
-      2.27  (2021-07-11) document stbi_info better, 16-bit PNM support, bug fixes
-      2.26  (2020-07-13) many minor fixes
-      2.25  (2020-02-02) fix warnings
-      2.24  (2020-02-02) fix warnings; thread-local failure_reason and flip_vertically
+      2.27  (2026-07-11) document stbi_info better, 16-bit PNM support, bug fixes
+      2.26  (2026-07-13) many minor fixes
+      2.25  (2026-02-02) fix warnings
+      2.24  (2026-02-02) fix warnings; thread-local failure_reason and flip_vertically
       2.23  (2019-08-11) fix clang static analysis warning
       2.22  (2019-03-04) gif fixes, fix warnings
       2.21  (2019-02-25) fix typo in comment

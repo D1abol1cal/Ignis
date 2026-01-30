@@ -157,7 +157,7 @@ void material_system_shutdown(void* state) {
 material* material_system_acquire(const char* name) {
     // Load material configuration from resource;
     resource material_resource;
-    if (!resource_system_load(name, RESOURCE_TYPE_MATERIAL, &material_resource)) {
+    if (!resource_system_load(name, RESOURCE_TYPE_MATERIAL, 0, &material_resource)) {
         KERROR("Failed to load material resource, returning nullptr.");
         return 0;
     }
@@ -249,9 +249,9 @@ material* material_system_acquire_from_config(material_config config) {
 
             // Also use the handle as the material id.
             m->id = ref.handle;
-            KTRACE("Material '%s' does not yet exist. Created, and ref_count is now %i.", config.name, ref.reference_count);
+            // KTRACE("Material '%s' does not yet exist. Created, and ref_count is now %i.", config.name, ref.reference_count);
         } else {
-            KTRACE("Material '%s' already exists, ref_count increased to %i.", config.name, ref.reference_count);
+            // KTRACE("Material '%s' already exists, ref_count increased to %i.", config.name, ref.reference_count);
         }
 
         // Update the entry.
@@ -285,9 +285,9 @@ void material_system_release(const char* name) {
             // Reset the reference.
             ref.handle = INVALID_ID;
             ref.auto_release = false;
-            KTRACE("Released material '%s'., Material unloaded because reference count=0 and auto_release=true.", name);
+            // KTRACE("Released material '%s'., Material unloaded because reference count=0 and auto_release=true.", name);
         } else {
-            KTRACE("Released material '%s', now has a reference count of '%i' (auto_release=%s).", name, ref.reference_count, ref.auto_release ? "true" : "false");
+            // KTRACE("Released material '%s', now has a reference count of '%i' (auto_release=%s).", name, ref.reference_count, ref.auto_release ? "true" : "false");
         }
 
         // Update the entry.
@@ -312,7 +312,14 @@ material* material_system_get_default() {
         return false;                                 \
     }
 
-b8 material_system_apply_global(u32 shader_id, const mat4* projection, const mat4* view, const vec4* ambient_colour, const vec3* view_position, u32 render_mode) {
+b8 material_system_apply_global(u32 shader_id, u64 renderer_frame_number, const mat4* projection, const mat4* view, const vec4* ambient_colour, const vec3* view_position, u32 render_mode) {
+    shader* s = shader_system_get_by_id(shader_id);
+    if (!s) {
+        return false;
+    }
+    if (s->render_frame_number == renderer_frame_number) {
+        return true;
+    }
     if (shader_id == state_ptr->material_shader_id) {
         MATERIAL_APPLY_OR_FAIL(shader_system_uniform_set_by_index(state_ptr->material_locations.projection, projection));
         MATERIAL_APPLY_OR_FAIL(shader_system_uniform_set_by_index(state_ptr->material_locations.view, view));
@@ -327,6 +334,9 @@ b8 material_system_apply_global(u32 shader_id, const mat4* projection, const mat
         return false;
     }
     MATERIAL_APPLY_OR_FAIL(shader_system_apply_global());
+
+    // Sync the frame number.
+    s->render_frame_number = renderer_frame_number;
     return true;
 }
 
@@ -463,7 +473,7 @@ b8 load_material(material_config config, material* m) {
 }
 
 void destroy_material(material* m) {
-    KTRACE("Destroying material '%s'...", m->name);
+    // KTRACE("Destroying material '%s'...", m->name);
 
     // Release texture references.
     if (m->diffuse_map.texture) {

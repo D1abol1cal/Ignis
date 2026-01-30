@@ -251,7 +251,7 @@ void create(vulkan_context* context, u32 width, u32 height, vulkan_swapchain* sw
     vulkan_image* image = kallocate(sizeof(texture), MEMORY_TAG_TEXTURE);
     vulkan_image_create(
         context,
-        VK_IMAGE_TYPE_2D,
+        TEXTURE_TYPE_2D,
         swapchain_extent.width,
         swapchain_extent.height,
         context->device.depth_format,
@@ -264,7 +264,7 @@ void create(vulkan_context* context, u32 width, u32 height, vulkan_swapchain* sw
 
     // Wrap it in a texture.
     context->swapchain.depth_texture = texture_system_wrap_internal(
-        "__kohi_default_depth_texture__",
+        "__Ignis_default_depth_texture__",
         swapchain_extent.width,
         swapchain_extent.height,
         context->device.depth_channel_count,

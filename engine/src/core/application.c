@@ -20,6 +20,8 @@
 #include "systems/geometry_system.h"
 #include "systems/resource_system.h"
 #include "systems/shader_system.h"
+#include "systems/camera_system.h"
+#include "systems/render_view_system.h"
 
 // TODO: temp
 #include "math/kmath.h"
@@ -59,6 +61,9 @@ typedef struct application_state {
     u64 renderer_system_memory_requirement;
     void* renderer_system_state;
 
+    u64 renderer_view_system_memory_requirement;
+    void* renderer_view_system_state;
+
     u64 texture_system_memory_requirement;
     void* texture_system_state;
 
@@ -68,11 +73,17 @@ typedef struct application_state {
     u64 geometry_system_memory_requirement;
     void* geometry_system_state;
 
+    u64 camera_system_memory_requirement;
+    void* camera_system_state;
+
     // TODO: temp
+    skybox sb;
+
     mesh meshes[10];
     u32 mesh_count;
 
-    geometry* test_ui_geometry;
+    mesh ui_meshes[10];
+    u32 ui_mesh_count;
     // TODO: end temp
 
 } application_state;
@@ -249,7 +260,96 @@ b8 application_create(game* game_inst) {
         return false;
     }
 
+    // Camera
+    camera_system_config camera_sys_config;
+    camera_sys_config.max_camera_count = 61;
+    camera_system_initialize(&app_state->camera_system_memory_requirement, 0, camera_sys_config);
+    app_state->camera_system_state = linear_allocator_allocate(&app_state->systems_allocator, app_state->camera_system_memory_requirement);
+    if (!camera_system_initialize(&app_state->camera_system_memory_requirement, app_state->camera_system_state, camera_sys_config)) {
+        KFATAL("Failed to initialize camera system. Application cannot continue.");
+        return false;
+    }
+
+    render_view_system_config render_view_sys_config = {};
+    render_view_sys_config.max_view_count = 251;
+    render_view_system_initialize(&app_state->renderer_view_system_memory_requirement, 0, render_view_sys_config);
+    app_state->renderer_view_system_state = linear_allocator_allocate(&app_state->systems_allocator, app_state->renderer_view_system_memory_requirement);
+    if (!render_view_system_initialize(&app_state->renderer_view_system_memory_requirement, app_state->renderer_view_system_state, render_view_sys_config)) {
+        KFATAL("Failed to initialize render view system. Aborting application.");
+        return false;
+    }
+
+    // Load render views
+    render_view_config skybox_config = {};
+    skybox_config.type = RENDERER_VIEW_KNOWN_TYPE_SKYBOX;
+    skybox_config.width = 0;
+    skybox_config.height = 0;
+    skybox_config.name = "skybox";
+    skybox_config.pass_count = 1;
+    render_view_pass_config skybox_passes[1];
+    skybox_passes[0].name = "Renderpass.Builtin.Skybox";
+    skybox_config.passes = skybox_passes;
+    skybox_config.view_matrix_source = RENDER_VIEW_VIEW_MATRIX_SOURCE_SCENE_CAMERA;
+    if (!render_view_system_create(&skybox_config)) {
+        KFATAL("Failed to create skybox view. Aborting application.");
+        return false;
+    }
+
+    render_view_config opaque_world_config = {};
+    opaque_world_config.type = RENDERER_VIEW_KNOWN_TYPE_WORLD;
+    opaque_world_config.width = 0;
+    opaque_world_config.height = 0;
+    opaque_world_config.name = "world_opaque";
+    opaque_world_config.pass_count = 1;
+    render_view_pass_config passes[1];
+    passes[0].name = "Renderpass.Builtin.World";
+    opaque_world_config.passes = passes;
+    opaque_world_config.view_matrix_source = RENDER_VIEW_VIEW_MATRIX_SOURCE_SCENE_CAMERA;
+    if (!render_view_system_create(&opaque_world_config)) {
+        KFATAL("Failed to create view. Aborting application.");
+        return false;
+    }
+
+    render_view_config ui_view_config = {};
+    ui_view_config.type = RENDERER_VIEW_KNOWN_TYPE_UI;
+    ui_view_config.width = 0;
+    ui_view_config.height = 0;
+    ui_view_config.name = "ui";
+    ui_view_config.pass_count = 1;
+    render_view_pass_config ui_passes[1];
+    ui_passes[0].name = "Renderpass.Builtin.UI";
+    ui_view_config.passes = ui_passes;
+    ui_view_config.view_matrix_source = RENDER_VIEW_VIEW_MATRIX_SOURCE_SCENE_CAMERA;
+    if (!render_view_system_create(&ui_view_config)) {
+        KFATAL("Failed to create view. Aborting application.");
+        return false;
+    }
+
     // TODO: temp
+
+    // Skybox
+    texture_map* cube_map = &app_state->sb.cubemap;
+    cube_map->filter_magnify = cube_map->filter_minify = TEXTURE_FILTER_MODE_LINEAR;
+    cube_map->repeat_u = cube_map->repeat_v = cube_map->repeat_w = TEXTURE_REPEAT_CLAMP_TO_EDGE;
+    cube_map->use = TEXTURE_USE_MAP_CUBEMAP;
+    if (!renderer_texture_map_acquire_resources(cube_map)) {
+        KFATAL("Unable to acquire resources for cube map texture.");
+        return false;
+    }
+    cube_map->texture = texture_system_acquire_cube("skybox", true);
+    geometry_config skybox_cube_config = geometry_system_generate_cube_config(10.0f, 10.0f, 10.0f, 1.0f, 1.0f, "skybox_cube", 0);
+    // Clear out the material name.
+    skybox_cube_config.material_name[0] = 0;
+    app_state->sb.g = geometry_system_acquire_from_config(skybox_cube_config, true);
+    app_state->sb.render_frame_number = INVALID_ID_U64;
+    shader* skybox_shader = shader_system_get(BUILTIN_SHADER_NAME_SKYBOX);
+    texture_map* maps[1] = {&app_state->sb.cubemap};
+    if (!renderer_shader_acquire_instance_resources(skybox_shader, maps, &app_state->sb.instance_id)) {
+        KFATAL("Unable to acquire shader resources for skybox texture.");
+        return false;
+    }
+
+    // World meshes
     app_state->mesh_count = 0;
 
     // Load up a cube configuration, and load geometry from it.
@@ -292,7 +392,7 @@ b8 application_create(game* game_inst) {
     // Test mesh loaded from file.
     mesh* car_mesh = &app_state->meshes[app_state->mesh_count];
     resource car_mesh_resource = {};
-    if (!resource_system_load("falcon", RESOURCE_TYPE_MESH, &car_mesh_resource)) {
+    if (!resource_system_load("falcon", RESOURCE_TYPE_MESH, 0, &car_mesh_resource)) {
         KERROR("Failed to load car test mesh!");
     } else {
         geometry_config* configs = (geometry_config*)car_mesh_resource.data;
@@ -309,7 +409,7 @@ b8 application_create(game* game_inst) {
     // Test mesh loaded from file.
     mesh* sponza_mesh = &app_state->meshes[app_state->mesh_count];
     resource sponza_mesh_resource = {};
-    if (!resource_system_load("sponza", RESOURCE_TYPE_MESH, &sponza_mesh_resource)) {
+    if (!resource_system_load("sponza", RESOURCE_TYPE_MESH, 0, &sponza_mesh_resource)) {
         KERROR("Failed to load sponza mesh!");
     } else {
         geometry_config* sponza_configs = (geometry_config*)sponza_mesh_resource.data;
@@ -361,7 +461,11 @@ b8 application_create(game* game_inst) {
     ui_config.indices = uiindices;
 
     // Get UI geometry from config.
-    app_state->test_ui_geometry = geometry_system_acquire_from_config(ui_config, true);
+    app_state->ui_mesh_count = 1;
+    app_state->ui_meshes[0].geometry_count =1;
+    app_state->ui_meshes[0].geometries = kallocate(sizeof(geometry*), MEMORY_TAG_ARRAY);
+    app_state->ui_meshes[0].geometries[0] = geometry_system_acquire_from_config(ui_config, true);
+    app_state->ui_meshes[0].transform = transform_create();
 
     // Load up default geometry.
     // app_state->test_geometry = geometry_system_get_default();
@@ -415,15 +519,6 @@ b8 application_run() {
                 break;
             }
 
-            // TODO: refactor packet creation
-            render_packet packet = {};
-            packet.delta_time = delta;
-            packet.geometry_count = 0;
-
-            // NOTE: Yes, I know this allocates/frees every framr. No, it doesn't matter because
-            // this is temporary.
-            packet.geometries = darray_create(geometry_render_data);
-
             if (app_state->mesh_count > 0) {
                 // Perform a small rotation on the first mesh.
                 quat rotation = quat_from_axis_angle((vec3){0, 1, 0}, 0.5f * delta, false);
@@ -438,35 +533,51 @@ b8 application_run() {
                 if (app_state->mesh_count > 2) {
                     transform_rotate(&app_state->meshes[2].transform, rotation);
                 }
-
-                // Iterate all meshes and add them to the packet's geometries collection
-                for (u32 i = 0; i < app_state->mesh_count; ++i) {
-                    mesh* m = &app_state->meshes[i];
-                    for (u32 j = 0; j < m->geometry_count; ++j) {
-                        geometry_render_data data;
-                        data.geometry = m->geometries[j];
-                        data.model = transform_get_world(&m->transform);
-                        darray_push(packet.geometries, data);
-                        packet.geometry_count++;
-                    }
-                }
             }
 
-            geometry_render_data test_ui_render;
-            test_ui_render.geometry = app_state->test_ui_geometry;
-            test_ui_render.model = mat4_translation((vec3){0, 0, 0});
-            packet.ui_geometry_count = 1;
-            packet.ui_geometries = &test_ui_render;
+            // TODO: refactor packet creation
+            render_packet packet = {};
+            packet.delta_time = delta;
+
+            // TODO: Read from frame config.
+            packet.view_count = 3;
+            render_view_packet views[3];
+            kzero_memory(views, sizeof(render_view_packet) * packet.view_count);
+            packet.views = views;
+
+            // Skybox
+            skybox_packet_data skybox_data = {};
+            skybox_data.sb = &app_state->sb;
+            if (!render_view_system_build_packet(render_view_system_get("skybox"), &skybox_data, &packet.views[0])) {
+                KERROR("Failed to build packet for view 'skybox'.");
+                return false;
+            }
+
+            // World 
+            mesh_packet_data world_mesh_data = {};
+            world_mesh_data.mesh_count = app_state->mesh_count;
+            world_mesh_data.meshes = app_state->meshes;
+            // TODO: performs a lookup on every frame.
+            if (!render_view_system_build_packet(render_view_system_get("world_opaque"), &world_mesh_data, &packet.views[1])) {
+                KERROR("Failed to build packet for view 'world_opaque'.");
+                return false;
+            }
+
+            // ui
+            mesh_packet_data ui_mesh_data = {};
+            ui_mesh_data.mesh_count = app_state->ui_mesh_count;
+            ui_mesh_data.meshes = app_state->ui_meshes;
+            if (!render_view_system_build_packet(render_view_system_get("ui"), &ui_mesh_data, &packet.views[2])) {
+                KERROR("Failed to build packet for view 'ui'.");
+                return false;
+            }
             // TODO: end temp
 
             renderer_draw_frame(&packet);
 
             // TODO: temp
             // Cleanup the packet.
-            if (packet.geometries) {
-                darray_destroy(packet.geometries);
-                packet.geometries = 0;
-            }
+            
             // TODO: end temp
 
             // Figure out how long the frame took and, if below
@@ -484,7 +595,7 @@ b8 application_run() {
                     platform_sleep(remaining_ms - 1);
                 }
 
-                //frame_count++;
+                // frame_count++;
             }
 
             // NOTE: Input update/state copying should always be handled
@@ -517,6 +628,11 @@ b8 application_run() {
     texture_system_shutdown(app_state->texture_system_state);
 
     shader_system_shutdown(app_state->shader_system_state);
+
+    // TODO: Temp
+    // TODO: implement skybox destroy.
+    renderer_texture_map_release_resources(&app_state->sb.cubemap);
+    // TODO: end temp
 
     renderer_system_shutdown(app_state->renderer_system_state);
 
