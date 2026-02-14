@@ -7,6 +7,12 @@ posts/
 .idea/
 MDs/
 /obj
-assets/
+# Ignore assets contents but track skybox shader source files
+assets/*
+!assets/shaders/
+assets/shaders/*
+!assets/shaders/Builtin.SkyboxShader.vert.glsl
+!assets/shaders/Builtin.SkyboxShader.frag.glsl
+!assets/shaders/Shader.Builtin.Skybox.shadercfg
 **/tmpclaude-*-cwd
 tmpclaude-*-cwd

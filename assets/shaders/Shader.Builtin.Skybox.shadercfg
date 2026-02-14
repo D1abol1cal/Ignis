@@ -1,0 +1,21 @@
+# Skybox shader config file
+version=1.0
+name=Shader.Builtin.Skybox
+renderpass=Renderpass.Builtin.World
+stages=vertex,fragment
+stagefiles=shaders/Builtin.SkyboxShader.vert.spv,shaders/Builtin.SkyboxShader.frag.spv
+depth_test=1
+depth_write=0
+use_instance=1
+use_local=0
+
+# Attributes: type,name
+attribute=vec3,in_position
+
+# Uniforms: type,scope,name
+# NOTE: For scope: 0=global, 1=instance, 2=local
+uniform=mat4,0,projection
+uniform=mat4,0,view
+# Instance uniforms - padding required for UBO allocation
+uniform=f32,1,padding
+uniform=samp,1,cubemap_sampler
