@@ -162,6 +162,9 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const renderer_
     VK_CHECK(vkCreateInstance(&create_info, context.allocator, &context.instance));
     KINFO("Vulkan Instance created.");
 
+    // TODO: implement multi-threading.
+    context.multithreading_enabled = false;
+
     // Debugger
 #if defined(_DEBUG)
     KDEBUG("Creating Vulkan debugger...");
@@ -1024,6 +1027,10 @@ void vulkan_renderer_destroy_geometry(geometry* geometry) {
         internal_data->id = INVALID_ID;
         internal_data->generation = INVALID_ID;
     }
+}
+
+b8 vulkan_renderer_is_multithreaded() {
+    return context.multithreading_enabled;
 }
 
 void vulkan_renderer_draw_geometry(geometry_render_data* data) {

@@ -9,9 +9,6 @@
 #include <math/kmath.h>
 #include <renderer/renderer_types.inl>
 
-#include<renderer/camera.h>
-#include<systems/camera_system.h>
-
 b8 game_initialize(game* game_inst) {
     KDEBUG("game_initialize() called!");
 

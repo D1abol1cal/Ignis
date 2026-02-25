@@ -115,7 +115,7 @@ STATIC_ASSERT(sizeof(f64) == 8, "Expected f64 to be 8 bytes.");
 
 /**
  * @brief Any id set to this should be considered invalid,
- * and not actually pointing to a real object. 
+ * and not actually pointing to a real object.
  */
 #define INVALID_ID_U64 18446744073709551615UL
 #define INVALID_ID 4294967295U
@@ -185,8 +185,8 @@ STATIC_ASSERT(sizeof(f64) == 8, "Expected f64 to be 8 bytes.");
  * @param max The maximum value of the range.
  * @returns The clamped value.
  */
-#define KCLAMP(value, min, max) (value <= min) ? min : (value >= max) ? max \
-                                                                      : value;
+#define KCLAMP(value, min, max) ((value <= min) ? min : (value >= max) ? max \
+                                                                       : value)
 
 // Inlining
 #if defined(__clang__) || defined(__gcc__)
