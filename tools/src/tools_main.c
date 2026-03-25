@@ -11,7 +11,7 @@ i32 process_shaders(i32 argc, char** argv);
 i32 main(i32 argc, char** argv) {
     // The first arg is always the program itself.
     if (argc < 2) {
-        KERROR("kohi tools requires at least one argument.");
+        KERROR("ignis tools requires at least one argument.");
         print_help();
         return -1;
     }
@@ -90,7 +90,7 @@ void print_help() {
     const char* extension = "";
 #endif
     KINFO(
-        "Kohi Game Engine Tools, Copyright 2021-2022 Travis Vroman.\n\
+        "Ignis Game Engine Tools, Copyright 2025-2026 Syed Nofel Talha.\n\
   usage:  tools%s <mode> [arguments...]\n\
   \n\
   modes:\n\

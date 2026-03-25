@@ -157,7 +157,7 @@ b8 render_view_world_on_build_packet(const struct render_view* self, void* data,
     geometry_distance* geometry_distances = darray_create(geometry_distance);
 
     for (u32 i = 0; i < mesh_data->mesh_count; ++i) {
-        mesh* m = &mesh_data->meshes[i];
+        mesh* m = mesh_data->meshes[i];
         mat4 model = transform_get_world(&m->transform);
 
         for (u32 j = 0; j < m->geometry_count; ++j) {
@@ -197,7 +197,15 @@ b8 render_view_world_on_build_packet(const struct render_view* self, void* data,
         out_packet->geometry_count++;
     }
 
+    // Clean up.
+    darray_destroy(geometry_distances);
+
     return true;
+}
+
+void render_view_world_on_destroy_packet(const struct render_view* self, struct render_view_packet* packet) {
+    darray_destroy(packet->geometries);
+    kzero_memory(packet, sizeof(render_view_packet));
 }
 
 b8 render_view_world_on_render(const struct render_view* self, const struct render_view_packet* packet, u64 frame_number, u64 render_target_index) {

@@ -42,33 +42,6 @@ b8 vulkan_buffer_create(
  */
 void vulkan_buffer_destroy(vulkan_context* context, vulkan_buffer* buffer);
 
-/**
- * @brief Resizes the given buffer. In this case, a new internal buffer of the given
- * size is created, data from the old buffer is copied to it, then the old buffer is
- * destroyed. This means this operation must be done when the buffer is not in use.
- * 
- * @param context A pointer to the Vulkan context.
- * @param new_size The new size of the buffer.
- * @param buffer A pointer to the buffer to be resized.
- * @param queue The queue used for the buffer resize operations.
- * @param pool The command pool utilized for the internal temporary command buffer.
- * @return True on success; otherwise false.
- */
-b8 vulkan_buffer_resize(
-    vulkan_context* context,
-    u64 new_size,
-    vulkan_buffer* buffer,
-    VkQueue queue,
-    VkCommandPool pool);
-
-/**
- * @brief Binds the given buffer for use.
- * 
- * @param context A pointer to the Vulkan context.
- * @param buffer A pointer to the buffer to be bound.
- * @param offset An offset in bytes to bind the buffer at.
- */
-void vulkan_buffer_bind(vulkan_context* context, vulkan_buffer* buffer, u64 offset);
 
 /**
  * @brief Locks (or maps) the buffer memory to a temporary location of host memory, which should be unlocked before 

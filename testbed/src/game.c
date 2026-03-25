@@ -3,6 +3,7 @@
 #include <core/logger.h>
 #include <core/kmemory.h>
 
+#include <core/kstring.h>
 #include <core/input.h>
 #include <core/event.h>
 
@@ -25,6 +26,9 @@ b8 game_update(game* game_inst, f32 delta_time) {
     u64 prev_alloc_count = alloc_count;
     alloc_count = get_memory_alloc_count();
     if (input_is_key_up('M') && input_was_key_down('M')) {
+        char* usage = get_memory_usage_str();
+        KINFO(usage);
+        string_free(usage);
         KDEBUG("Allocations: %llu (%llu this frame)", alloc_count, alloc_count - prev_alloc_count);
     }
 
@@ -108,6 +112,14 @@ b8 game_update(game* game_inst, f32 delta_time) {
         data.data.i32[0] = RENDERER_VIEW_MODE_DEFAULT;
         event_fire(EVENT_CODE_SET_RENDER_MODE, game_inst, data);
     }
+
+    // TODO: temp
+    // Bind a key to load up some data.
+    if (input_is_key_up('L') && input_was_key_down('L')) {
+        event_context context = {};
+        event_fire(EVENT_CODE_DEBUG1, game_inst, context);
+    }
+
     // TODO: end temp
 
     return true;

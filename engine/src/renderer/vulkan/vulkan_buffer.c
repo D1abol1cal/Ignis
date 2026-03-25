@@ -8,6 +8,8 @@
 #include "core/kmemory.h"
 #include "containers/freelist.h"
 
+static void vulkan_buffer_bind(vulkan_context* context, vulkan_buffer* buffer, u64 offset);
+
 void cleanup_freelist(vulkan_buffer* buffer) {
     if (buffer->has_freelist) {
         freelist_destroy(&buffer->buffer_freelist);
@@ -103,92 +105,8 @@ void vulkan_buffer_destroy(vulkan_context* context, vulkan_buffer* buffer) {
     buffer->is_locked = false;
 }
 
-b8 vulkan_buffer_resize(
-    vulkan_context* context,
-    u64 new_size,
-    vulkan_buffer* buffer,
-    VkQueue queue,
-    VkCommandPool pool) {
-    // Sanity check.
-    if (new_size < buffer->total_size) {
-        KERROR("vulkan_buffer_resize requires that new size be larger than the old. Not doing this could lead to data loss.");
-        return false;
-    }
 
-    if (buffer->has_freelist) {
-        // Resize the freelist first, if used.
-        u64 new_memory_requirement = 0;
-        freelist_resize(&buffer->buffer_freelist, &new_memory_requirement, 0, 0, 0);
-        void* new_block = kallocate(new_memory_requirement, MEMORY_TAG_RENDERER);
-        void* old_block = 0;
-        if (!freelist_resize(&buffer->buffer_freelist, &new_memory_requirement, new_block, new_size, &old_block)) {
-            KERROR("vulkan_buffer_resize failed to resize internal free list.");
-            kfree(new_block, new_memory_requirement, MEMORY_TAG_RENDERER);
-            return false;
-        }
-
-        // Clean up the old memory, then assign the new properties over.
-        kfree(old_block, buffer->freelist_memory_requirement, MEMORY_TAG_RENDERER);
-        buffer->freelist_memory_requirement = new_memory_requirement;
-        buffer->freelist_block = new_block;
-    }
-
-    buffer->total_size = new_size;
-
-    // Create new buffer.
-    VkBufferCreateInfo buffer_info = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-    buffer_info.size = new_size;
-    buffer_info.usage = buffer->usage;
-    buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;  // NOTE: Only used in one queue.
-
-    VkBuffer new_buffer;
-    VK_CHECK(vkCreateBuffer(context->device.logical_device, &buffer_info, context->allocator, &new_buffer));
-
-    // Gather memory requirements.
-    VkMemoryRequirements requirements;
-    vkGetBufferMemoryRequirements(context->device.logical_device, new_buffer, &requirements);
-
-    // Allocate memory info
-    VkMemoryAllocateInfo allocate_info = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
-    allocate_info.allocationSize = requirements.size;
-    allocate_info.memoryTypeIndex = (u32)buffer->memory_index;
-
-    // Allocate the memory.
-    VkDeviceMemory new_memory;
-    VkResult result = vkAllocateMemory(context->device.logical_device, &allocate_info, context->allocator, &new_memory);
-    if (result != VK_SUCCESS) {
-        KERROR("Unable to resize vulkan buffer because the required memory allocation failed. Error: %i", result);
-        return false;
-    }
-
-    // Bind the new buffer's memory
-    VK_CHECK(vkBindBufferMemory(context->device.logical_device, new_buffer, new_memory, 0));
-
-    // Copy over the data
-    vulkan_buffer_copy_to(context, pool, 0, queue, buffer->handle, 0, new_buffer, 0, buffer->total_size);
-
-    // Make sure anything potentially using these is finished.
-    vkDeviceWaitIdle(context->device.logical_device);
-
-    // Destroy the old
-    if (buffer->memory) {
-        vkFreeMemory(context->device.logical_device, buffer->memory, context->allocator);
-        buffer->memory = 0;
-    }
-    if (buffer->handle) {
-        vkDestroyBuffer(context->device.logical_device, buffer->handle, context->allocator);
-        buffer->handle = 0;
-    }
-
-    // Set new properties
-    buffer->total_size = new_size;
-    buffer->memory = new_memory;
-    buffer->handle = new_buffer;
-
-    return true;
-}
-
-void vulkan_buffer_bind(vulkan_context* context, vulkan_buffer* buffer, u64 offset) {
+static void vulkan_buffer_bind(vulkan_context* context, vulkan_buffer* buffer, u64 offset) {
     VK_CHECK(vkBindBufferMemory(context->device.logical_device, buffer->handle, buffer->memory, offset));
 }
 
