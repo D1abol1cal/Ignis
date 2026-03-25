@@ -98,6 +98,7 @@ typedef struct application_state {
     mesh ui_meshes[10];
     ui_text test_text;
     ui_text test_sys_text;
+    ui_text fps_text;
     // TODO: end temp
 
 } application_state;
@@ -436,17 +437,23 @@ b8 application_create(game* game_inst) {
     // TODO: temp
 
     // Create test ui text objects
-    if (!ui_text_create(UI_TEXT_TYPE_BITMAP, "Ubuntu Mono 21px", 21, "Some test text 123,\n\tyo!", &app_state->test_text)) {
+    if (!ui_text_create(UI_TEXT_TYPE_SYSTEM, "Noto Sans CJK JP", 31, "Belated Eid Mubarak from Ignis!", &app_state->test_text)) {
         KERROR("Failed to load basic ui bitmap text.");
         return false;
     }
-    ui_text_set_position(&app_state->test_text, vec3_create(50, 100, 0));
+    ui_text_set_position(&app_state->test_text, vec3_create(10, 145, 0));
 
-    if(!ui_text_create(UI_TEXT_TYPE_SYSTEM, "Noto Sans CJK JP", 31, "Some system text 123, \n\tyo!\n\n\tこんにちは 한", &app_state->test_sys_text)) {
+    if(!ui_text_create(UI_TEXT_TYPE_SYSTEM, "Noto Sans CJK JP", 31, "Ignis Engine - Built from scratch in C + Vulkan", &app_state->test_sys_text)) {
         KERROR("Failed to load basic ui system text.");
         return false;
     }
-    ui_text_set_position(&app_state->test_sys_text, vec3_create(50, 200, 0));
+    ui_text_set_position(&app_state->test_sys_text, vec3_create(10, 185, 0));
+
+    if (!ui_text_create(UI_TEXT_TYPE_SYSTEM, "Noto Sans CJK JP", 21, "FPS: 0", &app_state->fps_text)) {
+        KERROR("Failed to create fps text.");
+        return false;
+    }
+    ui_text_set_position(&app_state->fps_text, vec3_create(app_state->width - 100, 25, 0));
 
     // Skybox
     texture_map* cube_map = &app_state->sb.cubemap;
@@ -537,7 +544,7 @@ b8 application_create(game* game_inst) {
     string_ncopy(ui_config.name, "test_ui_geometry", GEOMETRY_NAME_MAX_LENGTH);
 
     const f32 w = 128.0f;
-    const f32 h = 32.0f;
+    const f32 h = 128.0f;
     vertex_2d uiverts[4];
     uiverts[0].position.x = 0.0f;  // 0    3
     uiverts[0].position.y = 0.0f;  //
@@ -689,7 +696,12 @@ b8 application_run() {
                 "Camera Pos: [%.3f, %.3f, %.3f]\nCamera Rot: [%.3f, %.3f, %.3f]",
                 pos.x, pos.y, pos.z,
                 rad_to_deg(rot.x), rad_to_deg(rot.y), rad_to_deg(rot.z));
-            ui_text_set_text(&app_state->test_text, text_buffer);
+            ui_text_set_text(&app_state->test_sys_text, text_buffer);
+
+            char fps_buffer[32];
+            string_format(fps_buffer, "FPS: %i", (i32)(1.0f / delta));
+            ui_text_set_text(&app_state->fps_text, fps_buffer);
+            ui_text_set_position(&app_state->fps_text, vec3_create(app_state->width - 100, 25, 0));
 
             ui_packet_data ui_packet = {};
 
@@ -706,10 +718,11 @@ b8 application_run() {
 
             ui_packet.mesh_data.mesh_count = ui_mesh_count;
             ui_packet.mesh_data.meshes = ui_meshes;
-            ui_packet.text_count = 2;
-            ui_text* texts[2];
+            ui_packet.text_count = 3;
+            ui_text* texts[3];
             texts[0] = &app_state->test_text;
             texts[1] = &app_state->test_sys_text;
+            texts[2] = &app_state->fps_text;
             ui_packet.texts = texts;
             if (!render_view_system_build_packet(render_view_system_get("ui"), &ui_packet, &packet.views[2])) {
                 KERROR("Failed to build packet for view 'ui'.");
@@ -764,6 +777,7 @@ b8 application_run() {
     // Destroy ui texts
     ui_text_destroy(&app_state->test_text);
     ui_text_destroy(&app_state->test_sys_text);
+    ui_text_destroy(&app_state->fps_text);
     // TODO: end temp
 
     // Shutdown event system.
