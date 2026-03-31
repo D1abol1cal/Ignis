@@ -733,9 +733,8 @@ b8 application_create(game* game_inst) {
     app_state->ui_meshes[0].transform = transform_create();
     app_state->ui_meshes[0].generation = 0;
 
-    // Move and rotate it some.
-    quat rotation = quat_from_axis_angle((vec3){0, 0, 1}, deg_to_rad(-45.0f), false);
-    transform_translate_rotate(&app_state->ui_meshes[0].transform, (vec3){5, 5, 0}, rotation);
+    // Position the logo in the top-left corner.
+    transform_set_position(&app_state->ui_meshes[0].transform, (vec3){5, 5, 0});
 
     // Load up default geometry.
     // app_state->test_geometry = geometry_system_get_default();
