@@ -35,14 +35,14 @@ typedef enum resource_type {
     RESOURCE_TYPE_CUSTOM
 } resource_type;
 
-/** @brief A magic number indicating the file as a kohi binary file. */
+/** @brief A magic number indicating the file as a Ignis binary file. */
 #define RESOURCE_MAGIC 0xcafebabe
 
 /**
  * @brief The header data for binary resource types.
  */
 typedef struct resource_header {
-    /** @brief A magic number indicating the file as a kohi binary file. */
+    /** @brief A magic number indicating the file as a Ignis binary file. */
     u32 magic_number;
     /** @brief The resource type. Maps to the enum resource_type. */
     u8 resource_type;

@@ -266,7 +266,7 @@ void create(vulkan_context* context, u32 width, u32 height, vulkan_swapchain* sw
 
         // Wrap it in a texture.
         texture_system_wrap_internal(
-            "__kohi_default_depth_texture__",
+            "__Ignis_default_depth_texture__",
             swapchain_extent.width,
             swapchain_extent.height,
             context->device.depth_channel_count,

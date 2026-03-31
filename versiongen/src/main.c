@@ -4,7 +4,7 @@
 
 int main(int argc, const char** argv) {
     if (argc < 2) {
-        printf("Kohi Version Generator Utility\n    usage: 'versiongen <major> <minor>'\n    example: 'versiongen 1 3' generates something like '1.3.22278.12345'.");
+        printf("Ignis Version Generator Utility\n    usage: 'versiongen <major> <minor>'\n    example: 'versiongen 1 3' generates something like '1.3.22278.12345'.");
         return 1;
     }
 
