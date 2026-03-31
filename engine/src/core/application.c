@@ -93,7 +93,7 @@ typedef struct application_state {
     // TODO: temp
     skybox sb;
 
-    mesh meshes[10];
+    mesh meshes[30];
     mesh* car_mesh;
     mesh* sponza_mesh;
     b8 models_loaded;
@@ -628,12 +628,14 @@ b8 application_create(game* game_inst) {
 
     // World meshes
     // Invalidate all meshes.
-    for (u32 i = 0; i < 10; ++i) {
+    for (u32 i = 0; i < 30; ++i) {
         app_state->meshes[i].generation = INVALID_ID_U8;
+    }
+    for (u32 i = 0; i < 10; ++i) {
         app_state->ui_meshes[i].generation = INVALID_ID_U8;
     }
 
-    u8 mesh_count = 0;
+    u32 mesh_count = 0;
 
     // Load up a cube configuration, and load geometry from it.
     mesh* cube_mesh = &app_state->meshes[mesh_count];
@@ -687,6 +689,67 @@ b8 application_create(game* game_inst) {
     app_state->sponza_mesh->unique_id = identifier_aquire_new_id(app_state->sponza_mesh);
     app_state->sponza_mesh->transform = transform_from_position_rotation_scale((vec3){15.0f, 0.0f, 1.0f}, quat_identity(), (vec3){0.05f, 0.05f, 0.05f});
     mesh_count++;
+
+    // Extra scene objects far outside Sponza (~100-200 units away).
+#define MESH_ADD(name_str, mat_str, W, H, D, PX, PY, PZ) \
+    { \
+        mesh* _m = &app_state->meshes[mesh_count++]; \
+        _m->geometry_count = 1; \
+        _m->geometries = kallocate(sizeof(geometry*), MEMORY_TAG_ARRAY); \
+        g_config = geometry_system_generate_cube_config((W), (H), (D), 1.0f, (H)/4.0f > 1.0f ? (H)/4.0f : 1.0f, (name_str), (mat_str)); \
+        _m->geometries[0] = geometry_system_acquire_from_config(g_config, true); \
+        _m->transform = transform_from_position((vec3){(PX), (PY), (PZ)}); \
+        _m->generation = 0; \
+        _m->unique_id = identifier_aquire_new_id(_m); \
+        geometry_system_config_dispose(&g_config); \
+    }
+
+    // Tall cobblestone tower
+    MESH_ADD("tower",    "cobblestone",   4.0f, 28.0f,  4.0f,  150.0f,  14.0f,  100.0f)
+    // Wide low brick platform
+    MESH_ADD("platform", "bricks",       30.0f,  2.0f, 30.0f, -140.0f,   1.0f,  160.0f)
+    // Big crate straight ahead
+    MESH_ADD("crate",    "floor",        10.0f, 10.0f, 10.0f,   50.0f,   5.0f, -200.0f)
+    // Thin vertical slab
+    MESH_ADD("slab",     "cobblestone",   2.0f, 20.0f,  8.0f, -100.0f,  10.0f, -120.0f)
+    // Squat boulder
+    MESH_ADD("boulder",  "test_material", 12.0f, 5.0f, 9.0f,   90.0f,   2.5f,  150.0f)
+
+    // ------------------------------------------------------------------
+    // "NOFEL" in 3D block letters — Z = -250, centered around X = 0.
+    // Each letter bounding box is 10 units wide × 14 units tall × 2 deep.
+    // Letter spacing: 15 units (10 wide + 5 gap). Centered: BX = -35 for N.
+    // ------------------------------------------------------------------
+
+    // --- N  (BX = -35): staircase diagonal bridges the two columns ---
+    MESH_ADD("N_Lpost", "cobblestone",  2.0f, 14.0f, 2.0f,  -34.0f,  7.0f, -250.0f)
+    MESH_ADD("N_Rpost", "cobblestone",  2.0f, 14.0f, 2.0f,  -26.0f,  7.0f, -250.0f)
+    MESH_ADD("N_D1",    "cobblestone",  3.0f,  4.0f, 2.0f,  -32.5f, 11.0f, -250.0f)
+    MESH_ADD("N_D2",    "cobblestone",  4.0f,  4.0f, 2.0f,  -30.0f,  7.0f, -250.0f)
+    MESH_ADD("N_D3",    "cobblestone",  3.0f,  4.0f, 2.0f,  -27.5f,  3.0f, -250.0f)
+
+    // --- O  (BX = -20) ---
+    MESH_ADD("O_top",   "cobblestone", 10.0f,  2.0f, 2.0f,  -15.0f, 13.0f, -250.0f)
+    MESH_ADD("O_bot",   "cobblestone", 10.0f,  2.0f, 2.0f,  -15.0f,  1.0f, -250.0f)
+    MESH_ADD("O_Lpost", "cobblestone",  2.0f, 10.0f, 2.0f,  -19.0f,  7.0f, -250.0f)
+    MESH_ADD("O_Rpost", "cobblestone",  2.0f, 10.0f, 2.0f,  -11.0f,  7.0f, -250.0f)
+
+    // --- F  (BX = -5) ---
+    MESH_ADD("F_post",  "cobblestone",  2.0f, 14.0f, 2.0f,   -4.0f,  7.0f, -250.0f)
+    MESH_ADD("F_top",   "cobblestone", 10.0f,  2.0f, 2.0f,    0.0f, 13.0f, -250.0f)
+    MESH_ADD("F_mid",   "cobblestone",  8.0f,  2.0f, 2.0f,   -1.0f,  7.0f, -250.0f)
+
+    // --- E  (BX = 10) ---
+    MESH_ADD("E_post",  "cobblestone",  2.0f, 14.0f, 2.0f,   11.0f,  7.0f, -250.0f)
+    MESH_ADD("E_top",   "cobblestone", 10.0f,  2.0f, 2.0f,   15.0f, 13.0f, -250.0f)
+    MESH_ADD("E_mid",   "cobblestone",  6.0f,  2.0f, 2.0f,   14.0f,  7.0f, -250.0f)
+    MESH_ADD("E_bot",   "cobblestone", 10.0f,  2.0f, 2.0f,   15.0f,  1.0f, -250.0f)
+
+    // --- L  (BX = 25) ---
+    MESH_ADD("L_post",  "cobblestone",  2.0f, 14.0f, 2.0f,   26.0f,  7.0f, -250.0f)
+    MESH_ADD("L_bot",   "cobblestone", 10.0f,  2.0f, 2.0f,   30.0f,  1.0f, -250.0f)
+
+#undef MESH_ADD
 
     // Load up some test UI geometry.
     geometry_config ui_config;
@@ -831,9 +894,9 @@ b8 application_run() {
             mesh_packet_data world_mesh_data = {};
 
             u32 mesh_count = 0;
-            mesh* meshes[10];
+            mesh* meshes[30];
             // TODO: flexible size array
-            for (u32 i = 0; i < 10; ++i) {
+            for (u32 i = 0; i < 30; ++i) {
                 if (app_state->meshes[i].generation != INVALID_ID_U8) {
                     meshes[mesh_count] = &app_state->meshes[i];
                     mesh_count++;
@@ -1046,7 +1109,7 @@ b8 application_on_event(u16 code, void* sender, void* listener_inst, event_conte
         }
         case EVENT_CODE_OBJECT_HOVER_ID_CHANGED: {
             app_state->hovered_object_id = context.data.u32[0];
-            return true;
+            return false;  // Don't consume — let world view receive it too.
         }
     }
 

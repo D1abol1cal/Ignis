@@ -90,7 +90,7 @@ material* material_system_get_default();
  * @param render_mode The render mode.
  * @return True on success; otherwise false.
  */
-b8 material_system_apply_global(u32 shader_id, u64 renderer_frame_number, const mat4* projection, const mat4* view, const vec4* ambient_colour, const vec3* view_position, u32 render_mode);
+b8 material_system_apply_global(u32 shader_id, u64 renderer_frame_number, const mat4* projection, const mat4* view, const vec4* ambient_colour, const vec3* view_position, u32 render_mode, f32 time);
 
 /**
  * @brief Applies instance-level material data for the given material.

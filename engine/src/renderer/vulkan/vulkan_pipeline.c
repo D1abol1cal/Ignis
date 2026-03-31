@@ -122,16 +122,20 @@ b8 vulkan_graphics_pipeline_create(vulkan_context* context, const vulkan_pipelin
             return false;
         }
 
-        // NOTE: 32 is the max number of ranges we can ever have, since spec only guarantees 128 bytes with 4-byte alignment.
-        VkPushConstantRange ranges[32];
-        kzero_memory(ranges, sizeof(VkPushConstantRange) * 32);
+        // Merge all ranges into one to satisfy Vulkan spec VUID-00292:
+        // no two ranges may share the same stageFlags.
+        u32 total_size = 0;
         for (u32 i = 0; i < config->push_constant_range_count; ++i) {
-            ranges[i].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-            ranges[i].offset = config->push_constant_ranges[i].offset;
-            ranges[i].size = config->push_constant_ranges[i].size;
+            u32 end = config->push_constant_ranges[i].offset + config->push_constant_ranges[i].size;
+            if (end > total_size) total_size = end;
         }
-        pipeline_layout_create_info.pushConstantRangeCount = config->push_constant_range_count;
-        pipeline_layout_create_info.pPushConstantRanges = ranges;
+        VkPushConstantRange merged_range;
+        kzero_memory(&merged_range, sizeof(VkPushConstantRange));
+        merged_range.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+        merged_range.offset = 0;
+        merged_range.size = total_size;
+        pipeline_layout_create_info.pushConstantRangeCount = 1;
+        pipeline_layout_create_info.pPushConstantRanges = &merged_range;
     } else {
         pipeline_layout_create_info.pushConstantRangeCount = 0;
         pipeline_layout_create_info.pPushConstantRanges = 0;
