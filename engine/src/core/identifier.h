@@ -1,11 +1,11 @@
 /**
  * @file identifier.h
- * @author Travis Vroman (travis@kohiengine.com)
+ * @author Syed Nofel Talha (syednofeltalha2@gmail.com)
  * @brief Contains a system for creating numeric identifiers.
  * @version 1.0
- * @date 2022-09-22
+ * @date 2026-04-14
  *
- * @copyright Kohi Game Engine is Copyright (c) Travis Vroman 2021-2022
+ * @copyright Ignis Game Engine is Copyright (c) Syed Nofel Talha 2025-2026
  *
  */
 

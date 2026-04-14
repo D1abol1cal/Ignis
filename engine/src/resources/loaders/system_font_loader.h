@@ -5,7 +5,7 @@
  * @version 1.0
  * @date 2026-03-18
  *
- * @copyright Kohi Game Engine is Copyright (c) Syed Nofel Talha 2025-2026
+ * @copyright Ignis Game Engine is Copyright (c) Syed Nofel Talha 2025-2026
  *
  */
 
