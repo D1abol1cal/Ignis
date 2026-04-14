@@ -417,4 +417,5 @@ void freelist_register_tests() {
     test_manager_register_test(freelist_should_allocate_one_and_free_multi, "Freelist allocate and free multiple entries.");
     test_manager_register_test(freelist_should_allocate_one_and_free_multi_varying_sizes, "Freelist allocate and free multiple entries of varying sizes.");
     test_manager_register_test(freelist_should_allocate_to_full_and_fail_to_allocate_more, "Freelist allocate to full and fail when trying to allocate more.");
+    test_manager_register_test(freelist_multiple_alloc_and_free_random, "Freelist should randomly allocate and free.");
 }

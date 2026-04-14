@@ -3,8 +3,11 @@
 #include "core/logger.h"
 #include "core/kmemory.h"
 #include "core/event.h"
+#include "defines.h"
+#include "platform/platform.h"
 #include "math/kmath.h"
 #include "math/transform.h"
+#include "memory/linear_allocator.h"
 #include "containers/darray.h"
 #include "systems/resource_system.h"
 #include "systems/material_system.h"
@@ -22,6 +25,8 @@ typedef struct render_view_world_internal_data {
     camera* world_camera;
     vec4 ambient_colour;
     u32 render_mode;
+    u32 hovered_object_id;
+    u16 highlight_location;
 } render_view_world_internal_data;
 
 /** @brief A private structure used to sort geometry by distance from the camera. */
@@ -41,6 +46,15 @@ typedef struct geometry_distance {
  * @param ascending True to sort in ascending order; otherwise descending.
  */
 static void quick_sort(geometry_distance arr[], i32 low_index, i32 high_index, b8 ascending);
+
+static b8 render_view_world_on_hover_event(u16 code, void* sender, void* listener_inst, event_context context) {
+    render_view* self = (render_view*)listener_inst;
+    if (!self) return false;
+    render_view_world_internal_data* data = (render_view_world_internal_data*)self->internal_data;
+    if (!data) return false;
+    data->hovered_object_id = context.data.u32[0];
+    return false;  // Don't consume — allow other listeners to get it too.
+}
 
 static b8 render_view_on_event(u16 code, void* sender, void* listener_inst, event_context context) {
     render_view* self = (render_view*)listener_inst;
@@ -118,6 +132,10 @@ b8 render_view_world_on_create(struct render_view* self) {
         // TODO: Obtain from scene
         data->ambient_colour = (vec4){0.25f, 0.25f, 0.25f, 1.0f};
 
+        // Initialise hover tracking.
+        data->hovered_object_id = INVALID_ID;
+        data->highlight_location = shader_system_uniform_index(data->s, "highlight");
+
         // Listen for mode changes.
         if (!event_register(EVENT_CODE_SET_RENDER_MODE, self, render_view_on_event)) {
             KERROR("Unable to listen for render mode set event, creation failed.");
@@ -126,6 +144,11 @@ b8 render_view_world_on_create(struct render_view* self) {
 
         if (!event_register(EVENT_CODE_DEFAULT_RENDERTARGET_REFRESH_REQUIRED, self, render_view_on_event)) {
             KERROR("Unable to listen for refresh required event, creation failed.");
+            return false;
+        }
+
+        if (!event_register(EVENT_CODE_OBJECT_HOVER_ID_CHANGED, self, render_view_world_on_hover_event)) {
+            KERROR("Unable to listen for object hover id changed event, creation failed.");
             return false;
         }
         return true;
@@ -138,9 +161,8 @@ b8 render_view_world_on_create(struct render_view* self) {
 void render_view_world_on_destroy(struct render_view* self) {
     if (self && self->internal_data) {
         event_unregister(EVENT_CODE_SET_RENDER_MODE, self, render_view_on_event);
-
-        // Unregister from the event.
         event_unregister(EVENT_CODE_DEFAULT_RENDERTARGET_REFRESH_REQUIRED, self, render_view_on_event);
+        event_unregister(EVENT_CODE_OBJECT_HOVER_ID_CHANGED, self, render_view_world_on_hover_event);
 
         kfree(self->internal_data, sizeof(render_view_world_internal_data), MEMORY_TAG_RENDERER);
         self->internal_data = 0;
@@ -166,13 +188,13 @@ void render_view_world_on_resize(struct render_view* self, u32 width, u32 height
     }
 }
 
-b8 render_view_world_on_build_packet(const struct render_view* self, void* data, struct render_view_packet* out_packet) {
+b8 render_view_world_on_build_packet(const struct render_view* self, struct linear_allocator* frame_allocator, void* data, struct render_view_packet* out_packet) {
     if (!self || !data || !out_packet) {
         KWARN("render_view_world_on_build_packet requires valid pointer to view, packet, and data.");
         return false;
     }
 
-    mesh_packet_data* mesh_data = (mesh_packet_data*)data;
+    geometry_render_data* geometry_data = (geometry_render_data*)data;
     render_view_world_internal_data* internal_data = (render_view_world_internal_data*)self->internal_data;
 
     out_packet->geometries = darray_create(geometry_render_data);
@@ -188,34 +210,31 @@ b8 render_view_world_on_build_packet(const struct render_view* self, void* data,
 
     geometry_distance* geometry_distances = darray_create(geometry_distance);
 
-    for (u32 i = 0; i < mesh_data->mesh_count; ++i) {
-        mesh* m = mesh_data->meshes[i];
-        mat4 model = transform_get_world(&m->transform);
+    u32 geometry_data_count = darray_length(geometry_data);
+    for (u32 i = 0; i < geometry_data_count; ++i) {
+        geometry_render_data* g_data = &geometry_data[i];
+        if(!g_data->geometry) {
+            continue;
+        }
+        
+        // TODO: Add something to material to check for transparency.
+        if ((g_data->geometry->material->diffuse_map.texture->flags & TEXTURE_FLAG_HAS_TRANSPARENCY) == 0) {
+            // Only add meshes with _no_ transparency.
+            darray_push(out_packet->geometries, geometry_data[i]);
+            out_packet->geometry_count++;
+        } else {
+            // For meshes _with_ transparency, add them to a separate list to be sorted by distance later.
+            // Get the center, extract the global position from the model matrix and add it to the center,
+            // then calculate the distance between it and the camera, and finally save it to a list to be sorted.
+            // NOTE: This isn't perfect for translucent meshes that intersect, but is enough for our purposes now.
+            vec3 center = vec3_transform(g_data->geometry->center, g_data->model);
+            f32 distance = vec3_distance(center, internal_data->world_camera->position);
 
-        for (u32 j = 0; j < m->geometry_count; ++j) {
-            geometry_render_data render_data;
-            render_data.geometry = m->geometries[j];
-            render_data.model = model;
+            geometry_distance gdist;
+            gdist.distance = kabs(distance);
+            gdist.g = geometry_data[i];
 
-            // TODO: Add something to material to check for transparency.
-            if ((m->geometries[j]->material->diffuse_map.texture->flags & TEXTURE_FLAG_HAS_TRANSPARENCY) == 0) {
-                // Only add meshes with _no_ transparency.
-                darray_push(out_packet->geometries, render_data);
-                out_packet->geometry_count++;
-            } else {
-                // For meshes _with_ transparency, add them to a separate list to be sorted by distance later.
-                // Get the center, extract the global position from the model matrix and add it to the center,
-                // then calculate the distance between it and the camera, and finally save it to a list to be sorted.
-                // NOTE: This isn't perfect for translucent meshes that intersect, but is enough for our purposes now.
-                vec3 center = vec3_transform(render_data.geometry->center, model);
-                f32 distance = vec3_distance(center, internal_data->world_camera->position);
-
-                geometry_distance gdist;
-                gdist.distance = kabs(distance);
-                gdist.g = render_data;
-
-                darray_push(geometry_distances, gdist);
-            }
+            darray_push(geometry_distances, gdist);
         }
     }
 
@@ -259,7 +278,8 @@ b8 render_view_world_on_render(const struct render_view* self, const struct rend
         // Apply globals
         // TODO: Find a generic way to request data such as ambient colour (which should be from a scene),
         // and mode (from the renderer)
-        if (!material_system_apply_global(shader_id, frame_number, &packet->projection_matrix, &packet->view_matrix, &packet->ambient_colour, &packet->view_position, data->render_mode)) {
+        f32 time = (f32)platform_get_absolute_time();
+        if (!material_system_apply_global(shader_id, frame_number, &packet->projection_matrix, &packet->view_matrix, &packet->ambient_colour, &packet->view_position, data->render_mode, time)) {
             KERROR("Failed to use apply globals for material shader. Render frame failed.");
             return false;
         }
@@ -287,7 +307,10 @@ b8 render_view_world_on_render(const struct render_view* self, const struct rend
                 m->render_frame_number = frame_number;
             }
 
-            // Apply the locals
+            // Apply the locals — model matrix + highlight flag
+            u32 highlight = (data->hovered_object_id != INVALID_ID &&
+                             packet->geometries[i].unique_id == data->hovered_object_id) ? 1 : 0;
+            shader_system_uniform_set_by_index(data->highlight_location, &highlight);
             material_system_apply_local(m, &packet->geometries[i].model);
 
             // Draw it.
