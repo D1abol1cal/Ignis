@@ -308,8 +308,17 @@ b8 render_view_world_on_render(const struct render_view* self, const struct rend
             }
 
             // Apply the locals — model matrix + highlight flag
-            u32 highlight = (data->hovered_object_id != INVALID_ID &&
-                             packet->geometries[i].unique_id == data->hovered_object_id) ? 1 : 0;
+            u32 highlight;
+            if (packet->geometries[i].is_culled == 3) {
+                highlight = 3;  // camera marker: bright orange
+            } else if (packet->geometries[i].is_culled == 2) {
+                highlight = 2;  // in-frustum observer mode: bright blue
+            } else if (data->hovered_object_id != INVALID_ID &&
+                       packet->geometries[i].unique_id == data->hovered_object_id) {
+                highlight = 1;  // hovered: teal rim
+            } else {
+                highlight = 0;
+            }
             shader_system_uniform_set_by_index(data->highlight_location, &highlight);
             material_system_apply_local(m, &packet->geometries[i].model);
 

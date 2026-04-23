@@ -105,6 +105,24 @@ void main() {
         out_colour = vec4(0.0, 0.0, 0.0, 1.0);
     }
 
+    // Observer mode: in-frustum cubes → solid bright blue.
+    if (in_highlight == 2) {
+        out_colour = vec4(1.0, 1.0, 1.0, 1.0);
+        return;
+    }
+
+    // Observer mode: camera marker arrow → bright orange.
+    if (in_highlight == 3) {
+        out_colour = vec4(1.0, 0.55, 0.05, 1.0);
+        return;
+    }
+
+    // Observer mode: out-of-frustum objects → dark silhouette.
+    if (in_highlight == 4) {
+        out_colour = vec4(0.08, 0.08, 0.10, 1.0);
+        return;
+    }
+
     // Doom Eternal glory-kill glow: pulsing red rim + energy scan lines.
     // Avoids body tinting so it works on any texture colour.
     if(in_highlight != 0) {

@@ -11,6 +11,7 @@
 #include <containers/darray.h>
 
 #include <math/kmath.h>
+#include <math.h>
 #include <renderer/renderer_types.inl>
 #include <renderer/renderer_frontend.h>
 
@@ -189,8 +190,10 @@ b8 game_initialize(game* game_inst) {
 
     // World meshes
     // Invalidate all meshes.
-    for (u32 i = 0; i < 10; ++i) {
+    for (u32 i = 0; i < 120; ++i) {
         state->meshes[i].generation = INVALID_ID_U8;
+    }
+    for (u32 i = 0; i < 10; ++i) {
         state->ui_meshes[i].generation = INVALID_ID_U8;
     }
 
@@ -248,6 +251,118 @@ b8 game_initialize(game* game_inst) {
     state->sponza_mesh->unique_id = identifier_aquire_new_id(state->sponza_mesh);
     state->sponza_mesh->transform = transform_from_position_rotation_scale((vec3){15.0f, 0.0f, 1.0f}, quat_identity(), (vec3){0.05f, 0.05f, 0.05f});
     mesh_count++;
+
+    // Frustum culling demo grid: 6x6 cubes spread at 60-unit intervals over ±150 units.
+    // Visible as a flat field of blocks from the observer camera — the frustum cone is obvious.
+    {
+        const f32 spacing = 60.0f;
+        const f32 start   = -150.0f;
+        const u32 cols    = 6;
+        const u32 rows    = 6;
+        f32 sizes[6] = {8.0f, 12.0f, 6.0f, 15.0f, 10.0f, 7.0f};
+
+        u32 grid_start = mesh_count;
+        for (u32 row = 0; row < rows; ++row) {
+            for (u32 col = 0; col < cols; ++col) {
+                f32 x = start + col * spacing;
+                f32 z = start + row * spacing;
+                f32 s = sizes[(row + col) % 6];
+
+                char geo_name[32];
+                string_format(geo_name, "grid_cube_%u", mesh_count);
+
+                mesh* gm = &state->meshes[mesh_count];
+                gm->geometry_count = 1;
+                gm->geometries = kallocate(sizeof(geometry*), MEMORY_TAG_ARRAY);
+                g_config = geometry_system_generate_cube_config(s, s, s, 1.0f, 1.0f, geo_name, "test_material");
+                gm->geometries[0] = geometry_system_acquire_from_config(g_config, true);
+                geometry_system_config_dispose(&g_config);
+                gm->transform = transform_from_position((vec3){x, 0.0f, z});
+                gm->unique_id = identifier_aquire_new_id(gm);
+                gm->generation = 0;
+                mesh_count++;
+            }
+        }
+        KDEBUG("Created 36 grid cubes in mesh slots %u-%u", grid_start, mesh_count - 1);
+    }
+
+    // Dense cluster at Z=-220 — when the frustum sweeps this way draw count spikes.
+    // 8x8 tight grid of small cubes, varied heights to look like a city block.
+    {
+        const f32 cx = 0.0f, cz = -220.0f;
+        const f32 spacing = 18.0f;
+        const u32 dim = 8;
+        const f32 half = (dim - 1) * spacing * 0.5f;
+        f32 heights[8] = {14.0f, 22.0f, 10.0f, 30.0f, 18.0f, 25.0f, 12.0f, 20.0f};
+        u32 cluster_start = mesh_count;
+        for (u32 row = 0; row < dim; ++row) {
+            for (u32 col = 0; col < dim; ++col) {
+                f32 x = cx - half + col * spacing;
+                f32 z = cz - half + row * spacing;
+                f32 h = heights[(row + col) % 8];
+                f32 w = h * 0.6f;
+
+                char geo_name[32];
+                string_format(geo_name, "cluster_%u", mesh_count);
+
+                mesh* gm = &state->meshes[mesh_count];
+                gm->geometry_count = 1;
+                gm->geometries = kallocate(sizeof(geometry*), MEMORY_TAG_ARRAY);
+                g_config = geometry_system_generate_cube_config(w, h, w, 1.0f, 1.0f, geo_name, "test_material");
+                gm->geometries[0] = geometry_system_acquire_from_config(g_config, true);
+                geometry_system_config_dispose(&g_config);
+                gm->transform = transform_from_position((vec3){x, h * 0.5f, z});
+                gm->unique_id = identifier_aquire_new_id(gm);
+                gm->generation = 0;
+                mesh_count++;
+            }
+        }
+        KDEBUG("Created 64 cluster cubes in mesh slots %u-%u", cluster_start, mesh_count - 1);
+    }
+
+    // Camera marker — a flat arrow-shaped box that rotates with main_cam_yaw.
+    // Hidden (INVALID_ID_U8) until observer mode is activated.
+    state->cam_marker_mesh = &state->meshes[mesh_count];
+    state->cam_marker_mesh->geometry_count = 1;
+    state->cam_marker_mesh->geometries = kallocate(sizeof(geometry*), MEMORY_TAG_ARRAY);
+    g_config = geometry_system_generate_cube_config(5.0f, 2.0f, 14.0f, 1.0f, 1.0f, "cam_marker", "test_material");
+    state->cam_marker_mesh->geometries[0] = geometry_system_acquire_from_config(g_config, true);
+    geometry_system_config_dispose(&g_config);
+    state->cam_marker_mesh->transform = transform_from_position((vec3){0.0f, 5.0f, 0.0f});
+    state->cam_marker_mesh->unique_id = identifier_aquire_new_id(state->cam_marker_mesh);
+    state->cam_marker_mesh->generation = INVALID_ID_U8;  // hidden until observer mode
+    mesh_count++;
+
+    // Nose cube — tiny cube 9 units ahead of the marker center (local +Z = frustum forward).
+    // Parented to cam_marker_mesh so it rotates with it automatically.
+    state->cam_nose_mesh = &state->meshes[mesh_count];
+    state->cam_nose_mesh->geometry_count = 1;
+    state->cam_nose_mesh->geometries = kallocate(sizeof(geometry*), MEMORY_TAG_ARRAY);
+    g_config = geometry_system_generate_cube_config(2.5f, 2.5f, 2.5f, 1.0f, 1.0f, "cam_nose", "test_material");
+    state->cam_nose_mesh->geometries[0] = geometry_system_acquire_from_config(g_config, true);
+    geometry_system_config_dispose(&g_config);
+    state->cam_nose_mesh->transform = transform_from_position((vec3){0.0f, 0.0f, 9.0f});
+    transform_set_parent(&state->cam_nose_mesh->transform, &state->cam_marker_mesh->transform);
+    state->cam_nose_mesh->unique_id = identifier_aquire_new_id(state->cam_nose_mesh);
+    state->cam_nose_mesh->generation = INVALID_ID_U8;  // always hidden
+    mesh_count++;
+
+    // Frustum pyramid wireframe — 8 thin boxes: 4 apex-to-corner edges + 4 far-rect edges.
+    for (u32 e = 0; e < 8; ++e) {
+        char edge_name[32];
+        string_format(edge_name, "frustum_edge_%u", e);
+        state->frustum_edge_meshes[e] = &state->meshes[mesh_count];
+        state->frustum_edge_meshes[e]->geometry_count = 1;
+        state->frustum_edge_meshes[e]->geometries = kallocate(sizeof(geometry*), MEMORY_TAG_ARRAY);
+        // Length 1 — scaled dynamically each frame via the transform scale.
+        g_config = geometry_system_generate_cube_config(0.6f, 0.6f, 1.0f, 1.0f, 1.0f, edge_name, "test_material");
+        state->frustum_edge_meshes[e]->geometries[0] = geometry_system_acquire_from_config(g_config, true);
+        geometry_system_config_dispose(&g_config);
+        state->frustum_edge_meshes[e]->transform = transform_create();
+        state->frustum_edge_meshes[e]->unique_id = identifier_aquire_new_id(state->frustum_edge_meshes[e]);
+        state->frustum_edge_meshes[e]->generation = INVALID_ID_U8;
+        mesh_count++;
+    }
 
     // Load up some test UI geometry.
     geometry_config ui_config;
@@ -455,6 +570,54 @@ b8 game_update(game* game_inst, f32 delta_time) {
         event_fire(EVENT_CODE_DEBUG1, game_inst, context);
     }
 
+    // F4 — freeze / unfreeze the culling frustum for visualisation
+    if (input_is_key_up(KEY_F4) && input_was_key_down(KEY_F4)) {
+        if (!state->frustum_frozen) {
+            state->frozen_frustum = state->camera_frustum;
+            state->frustum_frozen = true;
+            KDEBUG("Frustum frozen.");
+        } else {
+            state->frustum_frozen = false;
+            KDEBUG("Frustum unfrozen.");
+        }
+    }
+
+    // F3 — toggle overhead observer camera with auto-rotating frustum sweep
+    if (input_is_key_up(KEY_F3) && input_was_key_down(KEY_F3)) {
+        if (!state->observer_mode) {
+            // Save player camera so we can restore it later.
+            state->saved_main_cam_pos = camera_position_get(state->world_camera);
+            state->saved_main_cam_rot = camera_rotation_euler_get(state->world_camera);
+            state->main_cam_yaw = state->saved_main_cam_rot.y;
+            camera_position_set(state->world_camera, (vec3){0.0f, 250.0f, 0.0f});
+            camera_rotation_euler_set(state->world_camera, (vec3){deg_to_rad(-89.0f), 0.0f, 0.0f});
+            // Hide original scene objects — only grid cubes and markers shown in observer mode.
+            for (u32 i = 0; i < 5; ++i) state->meshes[i].generation = INVALID_ID_U8;
+            state->cam_marker_mesh->generation = 0;
+            state->cam_nose_mesh->generation = 0;
+            for (u32 e = 0; e < 8; ++e) state->frustum_edge_meshes[e]->generation = 0;
+            state->observer_mode = true;
+            KDEBUG("Observer mode ON — frustum sweeping at 25 deg/s. F4 pauses sweep.");
+        } else {
+            camera_position_set(state->world_camera, state->saved_main_cam_pos);
+            camera_rotation_euler_set(state->world_camera, state->saved_main_cam_rot);
+            // Restore original scene objects.
+            state->meshes[0].generation = 0;
+            state->meshes[1].generation = 0;
+            state->meshes[2].generation = 0;
+            // meshes[3] (car) and meshes[4] (sponza) only show if loaded.
+            if (state->models_loaded) {
+                state->meshes[3].generation = 0;
+                state->meshes[4].generation = 0;
+            }
+            state->cam_marker_mesh->generation = INVALID_ID_U8;
+            state->cam_nose_mesh->generation = INVALID_ID_U8;
+            for (u32 e = 0; e < 8; ++e) state->frustum_edge_meshes[e]->generation = INVALID_ID_U8;
+            state->observer_mode = false;
+            KDEBUG("Observer mode OFF.");
+        }
+    }
+
     // TODO: end temp
 
     // Perform a small rotation on the first mesh.
@@ -485,19 +648,79 @@ b8 game_update(game* game_inst, f32 delta_time) {
     f64 fps, frame_time;
     metrics_frame(&fps, &frame_time);
 
-    // Update the frustum
-    vec3 forward = camera_forward(state->world_camera);
-    vec3 right = camera_right(state->world_camera);
-    vec3 up = camera_up(state->world_camera);
-    // TODO: get camera fov, aspect, etc.
-    state->camera_frustum = frustom_create(&state->world_camera->position, &forward, &right, &up, (f32)state->width / state->height, deg_to_rad(45.0f), 0.1f, 1000.0f);
+    if (state->observer_mode) {
+        // Auto-rotate the virtual main camera yaw so the frustum sweeps like a spotlight.
+        if (!state->frustum_frozen) {
+            state->main_cam_yaw += deg_to_rad(25.0f) * delta_time;
+        }
+        // Marker faces frustum forward direction.
+        quat marker_rot = quat_from_axis_angle((vec3){0.0f, 1.0f, 0.0f}, K_PI - state->main_cam_yaw, false);
+        transform_set_rotation(&state->cam_marker_mesh->transform, marker_rot);
+
+        f32 aspect = (f32)state->width / state->height;
+
+        // Rebuild frustum.
+        vec3 cam_pos = {0.0f, 5.0f, 0.0f};
+        f32 yaw = state->main_cam_yaw;
+        vec3 fwd   = {-ksin(yaw), 0.0f, -kcos(yaw)};
+        vec3 right = { kcos(yaw), 0.0f, -ksin(yaw)};
+        vec3 up    = {0.0f, 1.0f, 0.0f};
+        state->camera_frustum = frustom_create(&cam_pos, &fwd, &right, &up,
+                                               aspect, deg_to_rad(45.0f), 0.01f, 2000.0f);
+
+        // Flat triangle footprint: apex + two far-plane corners at camera height.
+        // From the top-down observer view this looks like a perfect V — no vertical
+        // component means no distortion or intersecting lines when viewed from above.
+        const f32 far_vis  = 400.0f;
+        const f32 half_h_v = far_vis * ktan(deg_to_rad(22.5f)) * aspect;
+        vec3 fc     = vec3_add(cam_pos, vec3_mul_scalar(fwd, far_vis));
+        vec3 r_ext  = vec3_mul_scalar(right, half_h_v);
+        vec3 far_r  = vec3_add(fc, r_ext);   // far-right corner, same Y as camera
+        vec3 far_l  = vec3_sub(fc, r_ext);   // far-left  corner, same Y as camera
+
+        // Directly write the model matrix: vec3_mul_mat4 reads local X from data[0,1,2],
+        // local Y from data[4,5,6], local Z (edge direction, scaled) from data[8,9,10],
+        // translation from data[12,13,14].  All edges are horizontal so _ref=(0,1,0) always.
+#define SET_EDGE(idx, A, B) \
+        { \
+            vec3 _dv  = vec3_sub((B),(A)); \
+            f32  _len = vec3_length(_dv); \
+            vec3 _z   = vec3_mul_scalar(_dv, 1.0f/_len); \
+            vec3 _x   = vec3_normalized(vec3_cross((vec3){0,1,0}, _z)); \
+            vec3 _y   = (vec3){0,1,0}; \
+            vec3 _mid = {((A).x+(B).x)*0.5f, ((A).y+(B).y)*0.5f, ((A).z+(B).z)*0.5f}; \
+            mat4 _m   = mat4_identity(); \
+            _m.data[0]  = _x.x;      _m.data[1]  = _x.y;      _m.data[2]  = _x.z; \
+            _m.data[4]  = _y.x;      _m.data[5]  = _y.y;      _m.data[6]  = _y.z; \
+            _m.data[8]  = _z.x*_len; _m.data[9]  = _z.y*_len; _m.data[10] = _z.z*_len; \
+            _m.data[12] = _mid.x;    _m.data[13] = _mid.y;     _m.data[14] = _mid.z; \
+            state->frustum_edge_meshes[idx]->transform.local    = _m; \
+            state->frustum_edge_meshes[idx]->transform.is_dirty = false; \
+        }
+
+        SET_EDGE(0, cam_pos, far_r)   // right arm
+        SET_EDGE(1, cam_pos, far_l)   // left arm
+        SET_EDGE(2, far_l,   far_r)   // far edge closing the V
+        // edges 3-7 unused — hide them
+        for (u32 e = 3; e < 8; ++e) state->frustum_edge_meshes[e]->generation = INVALID_ID_U8;
+#undef SET_EDGE
+    } else if (!state->frustum_frozen) {
+        // Normal play: frustum follows the player camera.
+        vec3 forward = camera_forward(state->world_camera);
+        vec3 right   = camera_right(state->world_camera);
+        vec3 up      = camera_up(state->world_camera);
+        vec3 pos     = camera_position_get(state->world_camera);
+        state->camera_frustum = frustom_create(&pos, &forward, &right, &up,
+                                               (f32)state->width / state->height,
+                                               deg_to_rad(45.0f), 0.1f, 1000.0f);
+    }
 
     // Allocate only on first frame; subsequent frames reuse the saved darray above.
     if (!game_inst->frame_data.world_geometries) {
         game_inst->frame_data.world_geometries = darray_reserve(geometry_render_data, 512);
     }
     u32 draw_count = 0;
-    for (u32 i = 0; i < 10; ++i) {
+    for (u32 i = 0; i < 120; ++i) {
         mesh* m = &state->meshes[i];
         if (m->generation != INVALID_ID_U8) {
             mat4 model = transform_get_world(&m->transform);
@@ -545,14 +768,20 @@ b8 game_update(game* game_inst, f32 delta_time) {
                         kabs(extents_max.z - center.z),
                     };
 
-                    if (frustum_intersects_aabb(&state->camera_frustum, &center, &half_extents)) {
-                        // Add it to the list to be rendered.
+                    // Camera indicator meshes bypass frustum — always render orange.
+                    b8 is_marker = (m == state->cam_marker_mesh || m == state->cam_nose_mesh);
+                    for (u32 e = 0; e < 8 && !is_marker; ++e)
+                        is_marker = (m == state->frustum_edge_meshes[e]);
+                    b8 in_frustum = is_marker || frustum_intersects_aabb(&state->camera_frustum, &center, &half_extents);
+
+                    if (in_frustum) {
                         geometry_render_data data = {0};
                         data.model = model;
                         data.geometry = g;
                         data.unique_id = m->unique_id;
+                        // In observer mode: markers orange, grid cubes white. Normal mode: no highlight.
+                        data.is_culled = state->observer_mode ? (is_marker ? 3 : 2) : 0;
                         darray_push(game_inst->frame_data.world_geometries, data);
-
                         draw_count++;
                     }
                 }
@@ -567,7 +796,7 @@ b8 game_update(game* game_inst, f32 delta_time) {
         "\
 FPS: %5.1f(%4.1fms)        Pos=[%7.3f %7.3f %7.3f] Rot=[%7.3f, %7.3f, %7.3f]\n\
 Mouse: X=%-5d Y=%-5d   L=%s R=%s   NDC: X=%.6f, Y=%.6f\n\
-Drawn: %-5u Hovered: %s%u",
+Drawn: %-5u Hovered: %s%u%s",
         fps,
         frame_time,
         pos.x, pos.y, pos.z,
@@ -579,7 +808,8 @@ Drawn: %-5u Hovered: %s%u",
         mouse_y_ndc,
         draw_count,
         state->hovered_object_id == INVALID_ID ? "none" : "",
-        state->hovered_object_id == INVALID_ID ? 0 : state->hovered_object_id);
+        state->hovered_object_id == INVALID_ID ? 0 : state->hovered_object_id,
+        state->observer_mode ? (state->frustum_frozen ? "  [OBSERVER - PAUSED]" : "  [OBSERVER - SWEEPING]") : "");
     ui_text_set_text(&state->test_text, text_buffer);
 
     return true;

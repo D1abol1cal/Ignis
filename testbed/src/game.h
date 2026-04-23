@@ -20,7 +20,7 @@ typedef struct game_state {
     // TODO: temp
     skybox sb;
 
-    mesh meshes[10];
+    mesh meshes[120];
     mesh* car_mesh;
     mesh* sponza_mesh;
     b8 models_loaded;
@@ -31,6 +31,17 @@ typedef struct game_state {
 
     // The unique identifier of the currently hovered-over object.
     u32 hovered_object_id;
+
+    // Frustum culling visualisation (F3 / F4)
+    b8 observer_mode;           // overhead observer camera is active
+    vec3 saved_main_cam_pos;    // main camera state saved on F3 press
+    vec3 saved_main_cam_rot;
+    f32 main_cam_yaw;           // auto-rotating yaw used for the sweep frustum
+    mesh* cam_marker_mesh;         // body of virtual camera indicator
+    mesh* cam_nose_mesh;           // small cube at front tip (shows facing direction)
+    mesh* frustum_edge_meshes[8];  // 8 thin boxes forming wireframe frustum pyramid
+    b8 frustum_frozen;          // F4: pause the auto-rotation mid-sweep
+    frustum frozen_frustum;
     // TODO: end temp
 } game_state;
 
