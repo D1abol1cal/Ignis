@@ -18,6 +18,7 @@ typedef struct geometry_render_data {
     mat4 model;
     geometry* geometry;
     u32 unique_id;
+    u8 is_culled;  // debug: 1 = outside frustum, shown as dark silhouette in observer mode
 } geometry_render_data;
 
 typedef enum renderer_debug_view_mode {
