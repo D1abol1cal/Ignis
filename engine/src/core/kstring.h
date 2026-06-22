@@ -380,3 +380,32 @@ KAPI void string_filename_from_path(char* dest, const char* path);
  * @param path The full path to extract from.
  */
 KAPI void string_filename_no_extension_from_path(char* dest, const char* path);
+
+// ----------------------
+// KString implementation
+// ----------------------
+
+/**
+ * @brief A kstring is a managed string for higher-level logic to use. It is
+ * safer and, in some cases quicker than a typical cstring because it maintains
+ * length/allocation information and doesn't have to use strlen on most of its
+ * internal operations.
+ */
+typedef struct kstring {
+    /** @brief The current length of the string in bytes. */
+    u32 length;
+    /** @brief The amount of currently allocated memory. Always accounts for a null terminator. */
+    u32 allocated;
+    /** @brief The raw string data. */
+    char* data;
+} kstring;
+
+KAPI void kstring_create(kstring* out_string);
+KAPI void kstring_from_cstring(const char* source, kstring* out_string);
+KAPI void kstring_destroy(kstring* string);
+
+KAPI u32 kstring_length(const kstring* string);
+KAPI u32 kstring_utf8_length(const kstring* string);
+
+KAPI void kstring_append_str(kstring* string, const char* s);
+KAPI void kstring_append_kstring(kstring* string, const kstring* other);
