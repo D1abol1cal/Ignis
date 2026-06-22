@@ -13,18 +13,15 @@ layout(set = 0, binding = 0) uniform global_uniform_object {
 	vec4 ambient_colour;
 	vec3 view_position;
 	int mode;
-	float time;
 } global_ubo;
 
 layout(push_constant) uniform push_constants {
-
+	
 	// Only guaranteed a total of 128 bytes.
-	mat4 model;     // 64 bytes
-	uint highlight; // 4 bytes
+	mat4 model; // 64 bytes
 } u_push_constants;
 
-layout(location = 0) flat out int out_mode;
-layout(location = 9) flat out uint out_highlight;
+layout(location = 0) out int out_mode;
 
 // Data Transfer Object
 layout(location = 1) out struct dto {
@@ -51,5 +48,4 @@ void main() {
     gl_Position = global_ubo.projection * global_ubo.view * u_push_constants.model * vec4(in_position, 1.0);
 
 	out_mode = global_ubo.mode;
-	out_highlight = u_push_constants.highlight;
 }

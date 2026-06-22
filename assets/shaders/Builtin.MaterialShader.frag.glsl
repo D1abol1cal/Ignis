@@ -2,15 +2,6 @@
 
 layout(location = 0) out vec4 out_colour;
 
-layout(set = 0, binding = 0) uniform global_uniform_object {
-    mat4 projection;
-    mat4 view;
-    vec4 ambient_colour;
-    vec3 view_position;
-    int mode;
-    float time;
-} global_ubo;
-
 layout(set = 1, binding = 0) uniform local_uniform_object {
     vec4 diffuse_colour;
     float shininess;
@@ -64,7 +55,6 @@ const int SAMP_NORMAL = 2;
 layout(set = 1, binding = 1) uniform sampler2D samplers[3];
 
 layout(location = 0) flat in int in_mode;
-layout(location = 9) flat in uint in_highlight;
 // Data Transfer Object
 layout(location = 1) in struct dto {
     vec4 ambient;
@@ -101,53 +91,6 @@ void main() {
         out_colour += calculate_point_light(p_light_1, normal, in_dto.frag_position, view_direction);
     } else if(in_mode == 2) {
         out_colour = vec4(abs(normal), 1.0);
-    } else {
-        out_colour = vec4(0.0, 0.0, 0.0, 1.0);
-    }
-
-    // Doom Eternal glory-kill glow: pulsing red rim + energy scan lines.
-    // Avoids body tinting so it works on any texture colour.
-    if(in_highlight != 0) {
-        vec3 view_dir = normalize(in_dto.view_position - in_dto.frag_position);
-        float ndotv = max(dot(normal, view_dir), 0.0);
-
-        // Multi-layer Fresnel
-        float rim_sharp = pow(1.0 - ndotv, 5.0);   // razor silhouette edge
-        float rim_wide  = pow(1.0 - ndotv, 2.2);   // mid aura
-        float rim_body  = pow(1.0 - ndotv, 1.0);   // very wide, for subtle darkening
-
-        // Organic double-beat pulse
-        float pulse = 0.55 + 0.3 * sin(global_ubo.time * 6.0) + 0.15 * sin(global_ubo.time * 12.5);
-
-        // Energy scan line sweeping upward through world space
-        float scan_pos  = fract(in_dto.frag_position.y * 0.35 - global_ubo.time * 0.9);
-        float scan      = smoothstep(0.0, 0.04, scan_pos) * (1.0 - smoothstep(0.07, 0.14, scan_pos));
-
-        // Secondary thin faster scan line
-        float scan2     = fract(in_dto.frag_position.y * 0.8  - global_ubo.time * 2.2);
-        float thin_scan = smoothstep(0.0, 0.01, scan2) * (1.0 - smoothstep(0.025, 0.04, scan2));
-
-        // Colour palette: Argent D'Nur teal — the energy of Doom's ancient realm
-        vec3 aura_col = vec3(0.0,  0.5,  0.6);   // deep teal body aura
-        vec3 rim_col  = vec3(0.05, 0.85, 0.9);   // bright cyan rim
-        vec3 edge_col = vec3(0.55, 1.0,  1.0);   // white-cyan silhouette flash
-        vec3 scan_col = vec3(0.1,  0.9,  0.85);  // pure Argent teal scan line
-
-        // Slightly darken non-edge areas so the rim pops
-        out_colour.rgb *= 1.0 - rim_body * 0.2;
-
-        // Wide aura — breathes with the pulse (low intensity, no colour shift)
-        out_colour.rgb += aura_col * rim_wide * 0.28 * pulse;
-
-        // Bright cyan rim at silhouette
-        out_colour.rgb += rim_col * rim_sharp * 0.7 * pulse;
-
-        // Hot bright edge — always on (gives the "outlined" feel)
-        out_colour.rgb += edge_col * pow(rim_sharp, 1.2) * 0.85;
-
-        // Energy scan lines
-        out_colour.rgb += scan_col * scan      * 0.4 * (0.3 + 0.7 * rim_wide);
-        out_colour.rgb += scan_col * thin_scan * 0.25;
     }
 }
 
