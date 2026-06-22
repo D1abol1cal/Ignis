@@ -52,14 +52,14 @@ typedef struct vulkan_buffer {
     u32 memory_property_flags;
     /** @brief The total size of the buffer. */
     u64 total_size;
-    /** @brief Indicates if this buffer has a freelist. */
+    /** @brief Indicates if this buffer has a freelist for sub-allocation. */
     b8 has_freelist;
-    /** @brief The freelist used for allocations, if enabled. */
+    /** @brief The freelist used for sub-allocation tracking, if enabled. */
     freelist buffer_freelist;
-    /** @brief The freelist's backing memory block. */
-    void* freelist_block;
     /** @brief The memory requirement for the freelist block. */
     u64 freelist_memory_requirement;
+    /** @brief The backing memory block for the freelist. */
+    void* freelist_block;
 } vulkan_buffer;
 
 /** @brief Contains swapchain support information and capabilities. */
@@ -187,6 +187,9 @@ typedef struct vulkan_swapchain {
      * Typically one less than the total number of images available.
      */
     u8 max_frames_in_flight;
+
+    /** @brief Indicates various flags used for swapchain instantiation. */
+    renderer_config_flags flags;
 
     /** @brief The swapchain internal handle. */
     VkSwapchainKHR handle;
@@ -584,6 +587,8 @@ typedef struct vulkan_context {
 
     /** @brief Indicates if the swapchain is currently being recreated. */
     b8 recreating_swapchain;
+    
+    b8 render_flag_changed;
 
     /** @brief The A collection of loaded geometries. @todo TODO: make dynamic */
     vulkan_geometry_data geometries[VULKAN_MAX_GEOMETRY_COUNT];
