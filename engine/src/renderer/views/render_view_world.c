@@ -3,8 +3,6 @@
 #include "core/logger.h"
 #include "core/kmemory.h"
 #include "core/event.h"
-#include "defines.h"
-#include "platform/platform.h"
 #include "math/kmath.h"
 #include "math/transform.h"
 #include "memory/linear_allocator.h"
@@ -25,8 +23,6 @@ typedef struct render_view_world_internal_data {
     camera* world_camera;
     vec4 ambient_colour;
     u32 render_mode;
-    u32 hovered_object_id;
-    u16 highlight_location;
 } render_view_world_internal_data;
 
 /** @brief A private structure used to sort geometry by distance from the camera. */
@@ -46,15 +42,6 @@ typedef struct geometry_distance {
  * @param ascending True to sort in ascending order; otherwise descending.
  */
 static void quick_sort(geometry_distance arr[], i32 low_index, i32 high_index, b8 ascending);
-
-static b8 render_view_world_on_hover_event(u16 code, void* sender, void* listener_inst, event_context context) {
-    render_view* self = (render_view*)listener_inst;
-    if (!self) return false;
-    render_view_world_internal_data* data = (render_view_world_internal_data*)self->internal_data;
-    if (!data) return false;
-    data->hovered_object_id = context.data.u32[0];
-    return false;  // Don't consume — allow other listeners to get it too.
-}
 
 static b8 render_view_on_event(u16 code, void* sender, void* listener_inst, event_context context) {
     render_view* self = (render_view*)listener_inst;
@@ -132,10 +119,6 @@ b8 render_view_world_on_create(struct render_view* self) {
         // TODO: Obtain from scene
         data->ambient_colour = (vec4){0.25f, 0.25f, 0.25f, 1.0f};
 
-        // Initialise hover tracking.
-        data->hovered_object_id = INVALID_ID;
-        data->highlight_location = shader_system_uniform_index(data->s, "highlight");
-
         // Listen for mode changes.
         if (!event_register(EVENT_CODE_SET_RENDER_MODE, self, render_view_on_event)) {
             KERROR("Unable to listen for render mode set event, creation failed.");
@@ -144,11 +127,6 @@ b8 render_view_world_on_create(struct render_view* self) {
 
         if (!event_register(EVENT_CODE_DEFAULT_RENDERTARGET_REFRESH_REQUIRED, self, render_view_on_event)) {
             KERROR("Unable to listen for refresh required event, creation failed.");
-            return false;
-        }
-
-        if (!event_register(EVENT_CODE_OBJECT_HOVER_ID_CHANGED, self, render_view_world_on_hover_event)) {
-            KERROR("Unable to listen for object hover id changed event, creation failed.");
             return false;
         }
         return true;
@@ -161,8 +139,9 @@ b8 render_view_world_on_create(struct render_view* self) {
 void render_view_world_on_destroy(struct render_view* self) {
     if (self && self->internal_data) {
         event_unregister(EVENT_CODE_SET_RENDER_MODE, self, render_view_on_event);
+
+        // Unregister from the event.
         event_unregister(EVENT_CODE_DEFAULT_RENDERTARGET_REFRESH_REQUIRED, self, render_view_on_event);
-        event_unregister(EVENT_CODE_OBJECT_HOVER_ID_CHANGED, self, render_view_world_on_hover_event);
 
         kfree(self->internal_data, sizeof(render_view_world_internal_data), MEMORY_TAG_RENDERER);
         self->internal_data = 0;
@@ -278,8 +257,7 @@ b8 render_view_world_on_render(const struct render_view* self, const struct rend
         // Apply globals
         // TODO: Find a generic way to request data such as ambient colour (which should be from a scene),
         // and mode (from the renderer)
-        f32 time = (f32)platform_get_absolute_time();
-        if (!material_system_apply_global(shader_id, frame_number, &packet->projection_matrix, &packet->view_matrix, &packet->ambient_colour, &packet->view_position, data->render_mode, time)) {
+        if (!material_system_apply_global(shader_id, frame_number, &packet->projection_matrix, &packet->view_matrix, &packet->ambient_colour, &packet->view_position, data->render_mode)) {
             KERROR("Failed to use apply globals for material shader. Render frame failed.");
             return false;
         }
@@ -307,10 +285,7 @@ b8 render_view_world_on_render(const struct render_view* self, const struct rend
                 m->render_frame_number = frame_number;
             }
 
-            // Apply the locals — model matrix + highlight flag
-            u32 highlight = (data->hovered_object_id != INVALID_ID &&
-                             packet->geometries[i].unique_id == data->hovered_object_id) ? 1 : 0;
-            shader_system_uniform_set_by_index(data->highlight_location, &highlight);
+            // Apply the locals
             material_system_apply_local(m, &packet->geometries[i].model);
 
             // Draw it.
