@@ -304,7 +304,7 @@ b8 game_initialize(game* game_inst) {
     // Move and rotate it some.
     // quat rotation = quat_from_axis_angle((vec3){0, 0, 1}, deg_to_rad(-45.0f), false);
     // transform_translate_rotate(&state->ui_meshes[0].transform, (vec3){5, 5, 0}, rotation);
-    transform_translate(&state->ui_meshes[0].transform, (vec3){650, 5, 0});
+    transform_translate(&state->ui_meshes[0].transform, (vec3){5, 5, 0});
 
     // TODO: end temp load/prepare stuff
 
