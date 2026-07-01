@@ -44,11 +44,14 @@ void keymap_binding_remove(keymap* map, keys key, keymap_entry_bind_type type, k
     if (map) {
         keymap_entry* entry = &map->entries[key];
         keymap_binding* node = entry->bindings;
-        keymap_binding* previous = entry->bindings;
+        keymap_binding* previous = 0;
         while (node) {
             if (node->callback == callback && node->modifiers == modifiers && node->type == type) {
-                // Remove it
-                previous->next = node->next;
+                if (previous) {
+                    previous->next = node->next;
+                } else {
+                    entry->bindings = node->next;
+                }
                 kfree(node, sizeof(keymap_binding), MEMORY_TAG_UNKNOWN);
                 return;
             }
