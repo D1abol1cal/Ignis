@@ -7,6 +7,17 @@ layout(set = 1, binding = 0) uniform local_uniform_object {
     float shininess;
 } object_ubo;
 
+layout(location = 0) flat in struct dto {
+	int mode;
+	vec4 ambient;
+	vec2 tex_coord;
+	vec3 normal;
+	vec3 view_position;
+	vec3 frag_position;
+	vec4 colour;
+	vec3 tangent;
+} in_dto;
+
 struct directional_light {
     vec3 direction;
     vec4 colour;
@@ -54,17 +65,6 @@ const int SAMP_SPECULAR = 1;
 const int SAMP_NORMAL = 2;
 layout(set = 1, binding = 1) uniform sampler2D samplers[3];
 
-layout(location = 0) flat in int in_mode;
-// Data Transfer Object
-layout(location = 1) in struct dto {
-    vec4 ambient;
-	vec2 tex_coord;
-	vec3 normal;
-	vec3 view_position;
-	vec3 frag_position;
-    vec4 colour;
-	vec3 tangent;
-} in_dto;
 
 mat3 TBN;
 
@@ -82,14 +82,14 @@ void main() {
     vec3 localNormal = 2.0 * texture(samplers[SAMP_NORMAL], in_dto.tex_coord).rgb - 1.0;
     normal = normalize(TBN * localNormal);
 
-    if(in_mode == 0 || in_mode == 1) {
+    if(in_dto.mode == 0 || in_dto.mode == 1) {
         vec3 view_direction = normalize(in_dto.view_position - in_dto.frag_position);
 
         out_colour = calculate_directional_light(dir_light, normal, view_direction);
 
         out_colour += calculate_point_light(p_light_0, normal, in_dto.frag_position, view_direction);
         out_colour += calculate_point_light(p_light_1, normal, in_dto.frag_position, view_direction);
-    } else if(in_mode == 2) {
+    } else if(in_dto.mode == 2) {
         out_colour = vec4(abs(normal), 1.0);
     }
 }
@@ -105,7 +105,7 @@ vec4 calculate_directional_light(directional_light light, vec3 normal, vec3 view
     vec4 diffuse = vec4(vec3(light.colour * diffuse_factor), diff_samp.a);
     vec4 specular = vec4(vec3(light.colour * specular_factor), diff_samp.a);
     
-    if(in_mode == 0) {
+    if(in_dto.mode == 0) {
         diffuse *= diff_samp;
         ambient *= diff_samp;
         specular *= vec4(texture(samplers[SAMP_SPECULAR], in_dto.tex_coord).rgb, diffuse.a);
@@ -129,7 +129,7 @@ vec4 calculate_point_light(point_light light, vec3 normal, vec3 frag_position, v
     vec4 diffuse = light.colour * diff;
     vec4 specular = light.colour * spec;
     
-    if(in_mode == 0) {
+    if(in_dto.mode == 0) {
         vec4 diff_samp = texture(samplers[SAMP_DIFFUSE], in_dto.tex_coord);
         diffuse *= diff_samp;
         ambient *= diff_samp;
