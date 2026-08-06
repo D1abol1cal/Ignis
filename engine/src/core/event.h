@@ -72,7 +72,7 @@ typedef b8 (*PFN_on_event)(u16 code, void* sender, void* listener_inst, event_co
 /**
  * @brief Initializes the event system.
  */
-void event_system_initialize(u64* memory_requirement, void* state);
+b8 event_system_initialize(u64* memory_requirement, void* state, void* config);
 
 /**
  * @brief Shuts the event system down.

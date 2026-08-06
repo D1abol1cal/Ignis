@@ -319,7 +319,7 @@ void freelist_clear(freelist* list) {
     state->head->next = 0;
 }
 
-u64 freelist_free_space(freelist* list) {
+u64 freelist_free_space(freelist* list) {                                                                                                                                               
     if (!list || !list->memory) {
         return 0;
     }

@@ -10,7 +10,7 @@ ifeq ($(OS),Windows_NT)
     # WIN32
 	BUILD_PLATFORM := windows
 	EXTENSION := .dll
-	COMPILER_FLAGS := -Wall -Werror -Wvla -Wgnu-folding-constant -Wno-missing-braces -fdeclspec
+	COMPILER_FLAGS := -Wall -Werror -Wvla -Wgnu-folding-constant -Wno-missing-braces -Wno-unused-but-set-variable -fdeclspec -std=gnu99
 	INCLUDE_FLAGS := -Iengine\src -I$(VULKAN_SDK)\include
 	LINKER_FLAGS := -shared -luser32 -lvulkan-1 -L$(VULKAN_SDK)\Lib -L$(OBJ_DIR)\engine
 	DEFINES += -D_CRT_SECURE_NO_WARNINGS
@@ -40,7 +40,7 @@ else
         # LINUX
 		BUILD_PLATFORM := linux
 		EXTENSION := .so
-		COMPILER_FLAGS := -Wall -Werror -Wvla -Wgnu-folding-constant -Wno-missing-braces -fdeclspec -fPIC
+		COMPILER_FLAGS := -Wall -Werror -Wvla -Wgnu-folding-constant -Wno-missing-braces -Wno-unused-but-set-variable -fdeclspec -std=gnu99 -fPIC
 		INCLUDE_FLAGS := -Iengine/src -I$(VULKAN_SDK)/include
 		LINKER_FLAGS := -shared -lvulkan -lxcb -lX11 -lX11-xcb -lxkbcommon -L$(VULKAN_SDK)/lib -L/usr/X11R6/lib
 		# .c files
@@ -53,7 +53,7 @@ else
         # OSX
 		BUILD_PLATFORM := macos
 		EXTENSION := .dylib
-		COMPILER_FLAGS := -Wall -Werror -Wvla -Wgnu-folding-constant -Wno-missing-braces -fdeclspec -fPIC -ObjC
+		COMPILER_FLAGS := -Wall -Werror -Wvla -Wgnu-folding-constant -Wno-missing-braces -Wno-unused-but-set-variable -fdeclspec -std=gnu99 -fPIC -ObjC
 		INCLUDE_FLAGS := -Iengine/src
 		LINKER_FLAGS := -shared -dynamiclib -install_name @rpath/libengine.dylib -lvulkan -lobjc -framework AppKit -framework QuartzCore
 		# .c and .m files

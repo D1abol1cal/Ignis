@@ -35,7 +35,7 @@ typedef struct material_system_config {
  * @param config The configuration for this system.
  * @return True on success; otherwise false.
  */
-b8 material_system_initialize(u64* memory_requirement, void* state, material_system_config config);
+b8 material_system_initialize(u64* memory_requirement, void* state, void* config);
 
 /**
  * @brief Shuts down the material system.
