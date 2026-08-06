@@ -21,9 +21,10 @@ layout(push_constant) uniform push_constants {
 	mat4 model; // 64 bytes
 } u_push_constants;
 
+layout(location = 0) flat out int out_mode;
+
 // Data Transfer Object
-layout(location = 0) out struct dto {
-	flat int mode;
+layout(location = 1) out struct dto {
 	vec4 ambient;
 	vec2 tex_coord;
 	vec3 normal;
@@ -46,5 +47,5 @@ void main() {
 	out_dto.view_position = global_ubo.view_position;
     gl_Position = global_ubo.projection * global_ubo.view * u_push_constants.model * vec4(in_position, 1.0);
 
-	out_dto.mode = global_ubo.mode;
+	out_mode = global_ubo.mode;
 }
