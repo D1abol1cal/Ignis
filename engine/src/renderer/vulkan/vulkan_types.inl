@@ -50,16 +50,6 @@ typedef struct vulkan_buffer {
     i32 memory_index;
     /** @brief The property flags for the memory used by the buffer. */
     u32 memory_property_flags;
-    /** @brief The total size of the buffer. */
-    u64 total_size;
-    /** @brief Indicates if this buffer has a freelist for sub-allocation. */
-    b8 has_freelist;
-    /** @brief The freelist used for sub-allocation tracking, if enabled. */
-    freelist buffer_freelist;
-    /** @brief The memory requirement for the freelist block. */
-    u64 freelist_memory_requirement;
-    /** @brief The backing memory block for the freelist. */
-    void* freelist_block;
 } vulkan_buffer;
 
 /** @brief Contains swapchain support information and capabilities. */

@@ -7,19 +7,6 @@ layout(set = 1, binding = 0) uniform local_uniform_object {
     float shininess;
 } object_ubo;
 
-layout(location = 0) flat in int in_mode;
-
-// Data Transfer Object
-layout(location = 1) in struct dto {
-	vec4 ambient;
-	vec2 tex_coord;
-	vec3 normal;
-	vec3 view_position;
-	vec3 frag_position;
-	vec4 colour;
-	vec3 tangent;
-} in_dto;
-
 struct directional_light {
     vec3 direction;
     vec4 colour;
@@ -67,6 +54,17 @@ const int SAMP_SPECULAR = 1;
 const int SAMP_NORMAL = 2;
 layout(set = 1, binding = 1) uniform sampler2D samplers[3];
 
+layout(location = 0) flat in int in_mode;
+// Data Transfer Object
+layout(location = 1) in struct dto {
+    vec4 ambient;
+	vec2 tex_coord;
+	vec3 normal;
+	vec3 view_position;
+	vec3 frag_position;
+    vec4 colour;
+	vec3 tangent;
+} in_dto;
 
 mat3 TBN;
 

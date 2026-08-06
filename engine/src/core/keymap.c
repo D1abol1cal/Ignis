@@ -25,7 +25,7 @@ void keymap_binding_add(keymap* map, keys key, keymap_entry_bind_type type, keym
             node = node->next;
         }
 
-        keymap_binding* new_entry = kallocate(sizeof(keymap_binding), MEMORY_TAG_APPLICATION);
+        keymap_binding* new_entry = kallocate(sizeof(keymap_binding), MEMORY_TAG_UNKNOWN);
         new_entry->callback = callback;
         new_entry->modifiers = modifiers;
         new_entry->type = type;
@@ -44,15 +44,12 @@ void keymap_binding_remove(keymap* map, keys key, keymap_entry_bind_type type, k
     if (map) {
         keymap_entry* entry = &map->entries[key];
         keymap_binding* node = entry->bindings;
-        keymap_binding* previous = 0;
+        keymap_binding* previous = entry->bindings;
         while (node) {
             if (node->callback == callback && node->modifiers == modifiers && node->type == type) {
-                if (previous) {
-                    previous->next = node->next;
-                } else {
-                    entry->bindings = node->next;
-                }
-                kfree(node, sizeof(keymap_binding), MEMORY_TAG_APPLICATION);
+                // Remove it
+                previous->next = node->next;
+                kfree(node, sizeof(keymap_binding), MEMORY_TAG_UNKNOWN);
                 return;
             }
             previous = node;

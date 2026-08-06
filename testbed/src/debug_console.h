@@ -7,6 +7,7 @@ struct ui_text;
 void debug_console_create();
 
 b8 debug_console_load();
+void debug_console_unload();
 void debug_console_update();
 
 struct ui_text* debug_console_get_text();
@@ -19,3 +20,6 @@ void debug_console_move_up();
 void debug_console_move_down();
 void debug_console_move_to_top();
 void debug_console_move_to_bottom();
+
+void debug_console_history_back();
+void debug_console_history_forward();
