@@ -1,11 +1,11 @@
 /**
  * @file application_types.h
- * @author Travis Vroman (travis@kohiengine.com)
+ * @author Syed Nofel Talha (syednofeltalha2@gmail.com)
  * @brief This file contains types to be consumed by the application library.
  * @version 1.0
- * @date 2022-01-10
+ * @date 2026-01-10
  * 
- * @copyright Kohi Game Engine is Copyright (c) Travis Vroman 2021-2022
+ * @copyright Ignis Game Engine is Copyright (c) Syed Nofel Talha 2025-2026
  * 
  */
 
@@ -13,6 +13,7 @@
 
 #include "core/engine.h"
 #include "memory/linear_allocator.h"
+#include "platform/platform.h"
 
 struct render_packet;
 
@@ -20,6 +21,24 @@ typedef struct app_frame_data {
     // A darray of world geometries to be rendered this frame.
     geometry_render_data* world_geometries;
 } app_frame_data;
+
+/** @brief Represents the various stages of application lifecycle. */
+typedef enum application_stage {
+    /** @brief Application is in an uninitialized state. */
+    APPLICATION_STAGE_UNINITIALIZED,
+    /** @brief Application is currently booting up. */
+    APPLICATION_STAGE_BOOTING,
+    /** @brief Application completed boot process and is ready to be initialized. */
+    APPLICATION_STAGE_BOOT_COMPLETE,
+    /** @brief Application is currently initializing. */
+    APPLICATION_STAGE_INITIALIZING,
+    /** @brief Application initialization is complete. */
+    APPLICATION_STAGE_INITIALIZED,
+    /** @brief Application is currently running. */
+    APPLICATION_STAGE_RUNNING,
+    /** @brief Application is in the process of shutting down. */
+    APPLICATION_STAGE_SHUTTING_DOWN
+} application_stage;
 
 /**
  * @brief Represents the basic application state in a application.
@@ -75,8 +94,12 @@ typedef struct application {
      */
     void (*shutdown)(struct application* app_inst);
 
-    /** @brief The required size for the application state. */
-    u64 state_memory_requirement;
+    void (*lib_on_unload)(struct application* game_inst);
+
+    void (*lib_on_load)(struct application* game_inst);
+
+    /** @brief The application stage of execution. */
+    application_stage stage;
 
     /** @brief application-specific state. Created and managed by the application. */
     void* state;
@@ -92,4 +115,10 @@ typedef struct application {
 
     /** @brief Data which is built up, used and discarded every frame. */
     app_frame_data frame_data;
+
+    // TODO: Move this to somewhere better...
+    dynamic_library renderer_library;
+    renderer_plugin render_plugin;
+
+    dynamic_library game_library;
 } application;

@@ -28,6 +28,30 @@ typedef struct platform_system_config {
     i32 height;
 } platform_system_config;
 
+typedef struct dynamic_library_function {
+    const char* name;
+    void* pfn;
+} dynamic_library_function;
+
+typedef struct dynamic_library {
+    const char* name;
+    const char* filename;
+    u64 internal_data_size;
+    void* internal_data;
+    u32 watch_id;
+
+    // darray
+    dynamic_library_function* functions;
+} dynamic_library;
+
+typedef enum platform_error_code {
+    PLATFORM_ERROR_SUCCESS = 0,
+    PLATFORM_ERROR_UNKNOWN = 1,
+    PLATFORM_ERROR_FILE_NOT_FOUND = 2,
+    PLATFORM_ERROR_FILE_LOCKED = 3,
+    PLATFORM_ERROR_FILE_EXISTS = 4
+} platform_error_code;
+
 /**
  * @brief Performs startup routines within the platform layer. Should be called twice,
  * once to obtain the memory requirement (with state=0), then a second time passing
@@ -133,7 +157,7 @@ f64 platform_get_absolute_time();
  *
  * @param ms The number of milliseconds to sleep for.
  */
-void platform_sleep(u64 ms);
+KAPI void platform_sleep(u64 ms);
 
 /**
  * @brief Obtains the number of logical processor cores.
@@ -141,3 +165,76 @@ void platform_sleep(u64 ms);
  * @return The number of logical processor cores.
  */
 i32 platform_get_processor_count();
+
+/**
+ * @brief Obtains the required memory amount for platform-specific handle data,
+ * and optionally obtains a copy of that data. Call twice, once with memory=0
+ * to obtain size, then a second time where memory = allocated block.
+ *
+ * @param out_size A pointer to hold the memory requirement.
+ * @param memory Allocated block of memory.
+ */
+KAPI void platform_get_handle_info(u64* out_size, void* memory);
+
+/**
+ * @brief Loads a dynamic library.
+ *
+ * @param name The name of the library file, *excluding* the extension. Required.
+ * @param out_library A pointer to hold the loaded library. Required.
+ * @return True on success; otherwise false.
+ */
+KAPI b8 platform_dynamic_library_load(const char* name, dynamic_library* out_library);
+
+/**
+ * @brief Unloads the given dynamic library.
+ *
+ * @param library A pointer to the loaded library. Required.
+ * @return True on success; otherwise false.
+ */
+KAPI b8 platform_dynamic_library_unload(dynamic_library* library);
+
+/**
+ * @brief Loads an exported function of the given name from the provided loaded library.
+ *
+ * @param name The function name to be loaded.
+ * @param library A pointer to the library to load the function from.
+ * @return True on success; otherwise false.
+ */
+KAPI b8 platform_dynamic_library_load_function(const char* name, dynamic_library* library);
+
+/**
+ * @brief Returns the file extension for the current platform.
+ */
+KAPI const char* platform_dynamic_library_extension();
+
+/**
+ * @brief Returns a file prefix for libraries for the current platform.
+ */
+KAPI const char* platform_dynamic_library_prefix();
+
+/**
+ * @brief Copies file at source to destination, optionally overwriting.
+ * 
+ * @param source The source file path.
+ * @param dest The destination file path.
+ * @param overwrite_if_exists Indicates if the file should be overwritten if it exists.
+ * @return An error code indicating success or failure.
+ */
+KAPI platform_error_code platform_copy_file(const char *source, const char *dest, b8 overwrite_if_exists);
+
+/**
+ * @brief Watch a file at the given path.
+ *
+ * @param file_path The file path. Required.
+ * @param out_watch_id A pointer to hold the watch identifier.
+ * @return True on success; otherwise false.
+ */
+KAPI b8 platform_watch_file(const char* file_path, u32* out_watch_id);
+
+/**
+ * @brief Stops watching the file with the given watch identifier.
+ *
+ * @param watch_id The watch identifier
+ * @return True on success; otherwise false.
+ */
+KAPI b8 platform_unwatch_file(u32 watch_id);

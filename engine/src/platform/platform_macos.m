@@ -7,37 +7,50 @@
 #include "core/input.h"
 #include "core/kthread.h"
 #include "core/kmutex.h"
+#include "core/kmemory.h"
+#include "core/kstring.h"
 
 #include "containers/darray.h"
 
 #include <mach/mach_time.h>
 #include <crt_externs.h>
 
+#include <copyfile.h>
+#include <errno.h>
+#include <sys/stat.h>
+
 #import <Foundation/Foundation.h>
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/QuartzCore.h>
+#import <QuartzCore/CAMetalLayer.h>
 
 #include <pthread.h>
 #include <errno.h>        // For error reporting
 
-// For surface creation
-#define VK_USE_PLATFORM_METAL_EXT
-#include <vulkan/vulkan.h>
-#include "renderer/vulkan/vulkan_types.inl"
-
 @class ApplicationDelegate;
 @class WindowDelegate;
 @class ContentView;
+
+typedef struct macos_handle_info {
+    CAMetalLayer* layer;
+} macos_handle_info;
+
+typedef struct macos_file_watch {
+    u32 id;
+    const char *file_path;
+    long last_write_time;
+} macos_file_watch;
  
 typedef struct platform_state {
     ApplicationDelegate* app_delegate;
     WindowDelegate* wnd_delegate;
     NSWindow* window;
     ContentView* view;
-    CAMetalLayer* layer;
-    VkSurfaceKHR surface;
+    macos_handle_info handle;
     b8 quit_flagged;
     u8  modifier_key_states;
+    // darray
+    macos_file_watch *watches;
 } platform_state;
 
 enum macos_modifier_keys {
@@ -57,6 +70,7 @@ static platform_state* state_ptr;
 keys translate_keycode(u32 ns_keycode);
 // Modifier key handling
 void handle_modifier_keys(u32 ns_keycode, u32 modifier_flags);
+void platform_update_watches();
 
 @interface WindowDelegate : NSObject <NSWindowDelegate> {
     platform_state* state;
@@ -122,9 +136,9 @@ void handle_modifier_keys(u32 ns_keycode, u32 modifier_flags);
 
     // Need to invert Y on macOS, since origin is bottom-left.
     // Also need to scale the mouse position by the device pixel ratio so screen lookups are correct.
-    NSSize window_size = state_ptr->layer.drawableSize;
-    i16 x = pos.x * state_ptr->layer.contentsScale;
-    i16 y = window_size.height - (pos.y * state_ptr->layer.contentsScale);
+    NSSize window_size = state_ptr->handle.layer.drawableSize;
+    i16 x = pos.x * state_ptr->handle.layer.contentsScale;
+    i16 y = window_size.height - (pos.y * state_ptr->handle.layer.contentsScale);
     
     input_process_mouse_move(x, y);
 }
@@ -262,8 +276,8 @@ static const NSRange kEmptyRange = { NSNotFound, 0 };
     event_context context;
     CGSize viewSize = state_ptr->view.bounds.size;
     NSSize newDrawableSize = [state_ptr->view convertSizeToBacking:viewSize];
-    state_ptr->layer.drawableSize = newDrawableSize;
-    state_ptr->layer.contentsScale = state_ptr->view.window.backingScaleFactor;
+    state_ptr->handle.layer.drawableSize = newDrawableSize;
+    state_ptr->handle.layer.contentsScale = state_ptr->view.window.backingScaleFactor;
 
     context.data.u16[0] = (u16)newDrawableSize.width;
     context.data.u16[1] = (u16)newDrawableSize.height;
@@ -284,8 +298,8 @@ static const NSRange kEmptyRange = { NSNotFound, 0 };
     event_context context;
     CGSize viewSize = state_ptr->view.bounds.size;
     NSSize newDrawableSize = [state_ptr->view convertSizeToBacking:viewSize];
-    state_ptr->layer.drawableSize = newDrawableSize;
-    state_ptr->layer.contentsScale = state_ptr->view.window.backingScaleFactor;
+    state_ptr->handle.layer.drawableSize = newDrawableSize;
+    state_ptr->handle.layer.contentsScale = state_ptr->view.window.backingScaleFactor;
 
     context.data.u16[0] = (u16)newDrawableSize.width;
     context.data.u16[1] = (u16)newDrawableSize.height;
@@ -340,8 +354,8 @@ b8 platform_system_startup(u64* memory_requirement, void* state, void* config) {
     [state_ptr->view setWantsLayer:YES];
 
     // Layer creation
-    state_ptr->layer = [CAMetalLayer layer];
-    if (!state_ptr->layer) {
+    state_ptr->handle.layer = [CAMetalLayer layer];
+    if (!state_ptr->handle.layer) {
         KERROR("Failed to create layer for view");
     }
 
@@ -366,30 +380,30 @@ b8 platform_system_startup(u64* memory_requirement, void* state, void* config) {
     [state_ptr->window makeKeyAndOrderFront:nil];
 
     // Handle content scaling for various fidelity displays (i.e. Retina)
-    state_ptr->layer.bounds = state_ptr->view.bounds;
+    state_ptr->handle.layer.bounds = state_ptr->view.bounds;
     // It's important to set the drawableSize to the actual backing pixels. When rendering
     // full-screen, we can skip the macOS compositor if the size matches the display size.
-    state_ptr->layer.drawableSize = [state_ptr->view convertSizeToBacking:state_ptr->view.bounds.size];
+    state_ptr->handle.layer.drawableSize = [state_ptr->view convertSizeToBacking:state_ptr->view.bounds.size];
 
     // In its implementation of vkGetPhysicalDeviceSurfaceCapabilitiesKHR, MoltenVK takes into
     // consideration both the size (in points) of the bounds, and the contentsScale of the
     // CAMetalLayer from which the Vulkan surface was created.
     // See also https://github.com/KhronosGroup/MoltenVK/issues/428
-    state_ptr->layer.contentsScale = state_ptr->view.window.backingScaleFactor;
-    KDEBUG("contentScale: %f", state_ptr->layer.contentsScale);
+    state_ptr->handle.layer.contentsScale = state_ptr->view.window.backingScaleFactor;
+    KDEBUG("contentScale: %f", state_ptr->handle.layer.contentsScale);
 
-    [state_ptr->view setLayer:state_ptr->layer];
+    [state_ptr->view setLayer:state_ptr->handle.layer];
 
     // This is set to NO by default, but is also important to ensure we can bypass the compositor
     // in full-screen mode
     // See "Direct to Display" http://metalkit.org/2017/06/30/introducing-metal-2.html.
-    state_ptr->layer.opaque = YES;
+    state_ptr->handle.layer.opaque = YES;
 
     // Fire off a resize event to make sure the framebuffer is the right size.
     // Again, this should be the actual backing framebuffer size (taking into account pixel density).
     event_context context;
-    context.data.u16[0] = (u16)state_ptr->layer.drawableSize.width;
-    context.data.u16[1] = (u16)state_ptr->layer.drawableSize.height;
+    context.data.u16[0] = (u16)state_ptr->handle.layer.drawableSize.width;
+    context.data.u16[1] = (u16)state_ptr->handle.layer.drawableSize.height;
     event_fire(EVENT_CODE_RESIZED, 0, context);
 
     return true;
@@ -441,6 +455,8 @@ b8 platform_pump_messages(platform_state *plat_state) {
         }
 
         } // autoreleasepool
+
+        platform_update_watches();
 
         return !state_ptr->quit_flagged;
     }
@@ -505,6 +521,16 @@ void platform_sleep(u64 ms) {
 
 i32 platform_get_processor_count() {
     return [[NSProcessInfo processInfo] processorCount];
+}
+
+void platform_get_handle_info(u64 *out_size, void *memory) {
+
+    *out_size = sizeof(macos_handle_info);
+    if (!memory) {
+        return;
+    }
+
+    kcopy_memory(memory, &state_ptr->handle, *out_size);
 }
 
 // NOTE: Begin threads.
@@ -714,35 +740,149 @@ b8 kmutex_unlock(kmutex* mutex) {
 }
 // NOTE: End mutexes
 
-
-
-void platform_get_required_extension_names(const char ***names_darray) {
-    darray_push(*names_darray, &"VK_EXT_metal_surface");
-    // Required for macos
-    darray_push(*names_darray, &VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+const char *platform_dynamic_library_extension() {
+    return ".dylib";
 }
 
-b8 platform_create_vulkan_surface(vulkan_context *context) {
-    if (!state_ptr) {
+const char *platform_dynamic_library_prefix() {
+    return "lib";
+}
+
+platform_error_code platform_copy_file(const char *source, const char *dest, b8 overwrite_if_exists) {
+    u32 flags = COPYFILE_ALL;
+    if(!overwrite_if_exists) {
+        flags |= overwrite_if_exists;
+    }
+    int result = copyfile(source, dest, 0, flags);
+    if(result != 0) {
+        if(result == ENOENT) {
+            return PLATFORM_ERROR_FILE_NOT_FOUND;
+        } else if (result == EEXIST) {
+            // file exists and overwrite is off
+            return PLATFORM_ERROR_FILE_EXISTS;
+        } else {
+            return PLATFORM_ERROR_UNKNOWN;
+        }
+    }
+    return PLATFORM_ERROR_SUCCESS;
+}
+
+static b8 register_watch(const char *file_path, u32 *out_watch_id) {
+    if (!state_ptr || !file_path || !out_watch_id) {
+        if (out_watch_id) {
+            *out_watch_id = INVALID_ID;
+        }
+        return false;
+    }
+    *out_watch_id = INVALID_ID;
+
+    if (!state_ptr->watches) {
+        state_ptr->watches = darray_create(macos_file_watch);
+    }
+
+    struct stat info;
+    int result = stat(file_path, &info);
+    if(result != 0) {
+        if(errno == ENOENT) {
+            // File doesn't exist. TODO: report?
+        }
         return false;
     }
 
-    VkMetalSurfaceCreateInfoEXT create_info = {VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT};
-    create_info.pLayer = state_ptr->layer;
-
-    VkResult result = vkCreateMetalSurfaceEXT(
-        context->instance, 
-        &create_info,
-        context->allocator,
-        &state_ptr->surface);
-    if (result != VK_SUCCESS) {
-        KFATAL("Vulkan surface creation failed.");
-        return false;
+    u32 count = darray_length(state_ptr->watches);
+    for (u32 i = 0; i < count; ++i) {
+        macos_file_watch *w = &state_ptr->watches[i];
+        if (w->id == INVALID_ID) {
+            // Found a free slot to use.
+            w->id = i;
+            w->file_path = string_duplicate(file_path);
+            w->last_write_time = info.st_mtime;
+            *out_watch_id = i;
+            return true;
+        }
     }
 
-    context->surface = state_ptr->surface;
+    // If no empty slot is available, create and push a new entry.
+    macos_file_watch w = {0};
+    w.id = count;
+    w.file_path = string_duplicate(file_path);
+    w.last_write_time = info.st_mtime;
+    *out_watch_id = count;
+    darray_push(state_ptr->watches, w);
+
     return true;
 }
+
+static b8 unregister_watch(u32 watch_id) {
+    if (!state_ptr || !state_ptr->watches) {
+        return false;
+    }
+
+    u32 count = darray_length(state_ptr->watches);
+    if (count == 0 || watch_id > (count - 1)) {
+        return false;
+    }
+
+    macos_file_watch *w = &state_ptr->watches[watch_id];
+    w->id = INVALID_ID;
+    u32 len = string_length(w->file_path);
+    kfree((void *)w->file_path, sizeof(char) * (len + 1), MEMORY_TAG_STRING);
+    w->file_path = 0;
+    kzero_memory(&w->last_write_time, sizeof(long));
+
+    return true;
+}
+
+b8 platform_watch_file(const char *file_path, u32 *out_watch_id) {
+    return register_watch(file_path, out_watch_id);
+}
+
+b8 platform_unwatch_file(u32 watch_id) {
+    return unregister_watch(watch_id);
+}
+
+void platform_update_watches() {
+    if (!state_ptr || !state_ptr->watches) {
+        return;
+    }
+
+    u32 count = darray_length(state_ptr->watches);
+    for (u32 i = 0; i < count; ++i) {
+        macos_file_watch *f = &state_ptr->watches[i];
+        if (f->id != INVALID_ID) {
+
+            struct stat info;
+            int result = stat(f->file_path, &info);
+            if(result != 0) {
+                if(errno == ENOENT) {
+                    // File doesn't exist. Which means it was deleted. Remove the watch.
+                    event_context context = {0};
+                    context.data.u32[0] = f->id;
+                    event_fire(EVENT_CODE_WATCHED_FILE_DELETED, 0, context);
+                    KINFO("File watch id %d has been removed.", f->id);
+                    unregister_watch(f->id);
+                    continue;
+                } else {
+                    KWARN("Some other error occurred on file watch id %d", f->id);
+                }
+                // NOTE: some other error has occurred. TODO: Handle?
+                continue;
+            }
+
+            // Check the file time to see if it has been changed and update/notify if so.
+            if (info.st_mtime - f->last_write_time != 0) {
+                KTRACE("File update found.");
+                f->last_write_time = info.st_mtime;
+                // Notify listeners.
+                event_context context = {0};
+                context.data.u32[0] = f->id;
+                event_fire(EVENT_CODE_WATCHED_FILE_WRITTEN, 0, context);
+            }
+        }
+    }
+}
+
+
 
 keys translate_keycode(u32 ns_keycode) {
     // https://boredzo.org/blog/wp-content/uploads/2007/05/IMTx-virtual-keycodes.pdf

@@ -8,6 +8,9 @@
 #include "core/input.h"
 #include "core/kthread.h"
 #include "core/kmutex.h"
+#include "core/kmemory.h"
+#include "core/asserts.h"
+#include "core/kstring.h"
 
 #include "containers/darray.h"
 
@@ -20,35 +23,46 @@
 
 #if _POSIX_C_SOURCE >= 199309L
 #include <time.h>  // nanosleep
-#else
-#include <unistd.h>  // usleep
 #endif
 
 #include <pthread.h>
 #include <errno.h>        // For error reporting
 #include <sys/sysinfo.h>  // Processor info
+#include <sys/stat.h>
+#include <sys/sendfile.h>
+
+#include <fcntl.h>
+#include <limits.h>
+#include <unistd.h>
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
-// For surface creation
-#define VK_USE_PLATFORM_XCB_KHR
-#include <vulkan/vulkan.h>
-#include "renderer/vulkan/vulkan_types.inl"
+typedef struct linux_handle_info {
+    xcb_connection_t* connection;
+    xcb_window_t window;
+} linux_handle_info;
+
+typedef struct linux_file_watch {
+    u32 id;
+    const char *file_path;
+    long last_write_time;
+} linux_file_watch;
 
 typedef struct platform_state {
     Display* display;
-    xcb_connection_t* connection;
-    xcb_window_t window;
+    linux_handle_info handle;
     xcb_screen_t* screen;
     xcb_atom_t wm_protocols;
     xcb_atom_t wm_delete_win;
-    VkSurfaceKHR surface;
+    // darray
+    linux_file_watch* watches;
 } platform_state;
 
 static platform_state* state_ptr;
 
+void platform_update_watches();
 // Key translation
 keys translate_keycode(u32 x_keycode);
 
@@ -68,15 +82,15 @@ b8 platform_system_startup(u64* memory_requirement, void* state, void* config) {
     XAutoRepeatOff(state_ptr->display);
 
     // Retrieve the connection from the display.
-    state_ptr->connection = XGetXCBConnection(state_ptr->display);
+    state_ptr->handle.connection = XGetXCBConnection(state_ptr->display);
 
-    if (xcb_connection_has_error(state_ptr->connection)) {
+    if (xcb_connection_has_error(state_ptr->handle.connection)) {
         KFATAL("Failed to connect to X server via XCB.");
         return false;
     }
 
     // Get data from the X server
-    const struct xcb_setup_t* setup = xcb_get_setup(state_ptr->connection);
+    const struct xcb_setup_t* setup = xcb_get_setup(state_ptr->handle.connection);
 
     // Loop through screens using iterator
     xcb_screen_iterator_t it = xcb_setup_roots_iterator(setup);
@@ -89,7 +103,7 @@ b8 platform_system_startup(u64* memory_requirement, void* state, void* config) {
     state_ptr->screen = it.data;
 
     // Allocate a XID for the window to be created.
-    state_ptr->window = xcb_generate_id(state_ptr->connection);
+    state_ptr->handle.window = xcb_generate_id(state_ptr->handle.connection);
 
     // Register event types.
     // XCB_CW_BACK_PIXEL = filling then window bg with a single colour
@@ -107,14 +121,14 @@ b8 platform_system_startup(u64* memory_requirement, void* state, void* config) {
 
     // Create the window
     xcb_create_window(
-        state_ptr->connection,
+        state_ptr->handle.connection,
         XCB_COPY_FROM_PARENT,  // depth
-        state_ptr->window,
+        state_ptr->handle.window,
         state_ptr->screen->root,        // parent
-        typed_config->x,                              // x
-        typed_config->y,                              // y
-        typed_config->width,                          // width
-        typed_config->height,                         // height
+        typed_config->x,                // x
+        typed_config->y,                // y
+        typed_config->width,            // width
+        typed_config->height,           // height
         0,                              // No border
         XCB_WINDOW_CLASS_INPUT_OUTPUT,  // class
         state_ptr->screen->root_visual,
@@ -123,9 +137,9 @@ b8 platform_system_startup(u64* memory_requirement, void* state, void* config) {
 
     // Change the title
     xcb_change_property(
-        state_ptr->connection,
+        state_ptr->handle.connection,
         XCB_PROP_MODE_REPLACE,
-        state_ptr->window,
+        state_ptr->handle.window,
         XCB_ATOM_WM_NAME,
         XCB_ATOM_STRING,
         8,  // data should be viewed 8 bits at a time
@@ -135,30 +149,30 @@ b8 platform_system_startup(u64* memory_requirement, void* state, void* config) {
     // Tell the server to notify when the window manager
     // attempts to destroy the window.
     xcb_intern_atom_cookie_t wm_delete_cookie = xcb_intern_atom(
-        state_ptr->connection,
+        state_ptr->handle.connection,
         0,
         strlen("WM_DELETE_WINDOW"),
         "WM_DELETE_WINDOW");
     xcb_intern_atom_cookie_t wm_protocols_cookie = xcb_intern_atom(
-        state_ptr->connection,
+        state_ptr->handle.connection,
         0,
         strlen("WM_PROTOCOLS"),
         "WM_PROTOCOLS");
     xcb_intern_atom_reply_t* wm_delete_reply = xcb_intern_atom_reply(
-        state_ptr->connection,
+        state_ptr->handle.connection,
         wm_delete_cookie,
         NULL);
     xcb_intern_atom_reply_t* wm_protocols_reply = xcb_intern_atom_reply(
-        state_ptr->connection,
+        state_ptr->handle.connection,
         wm_protocols_cookie,
         NULL);
     state_ptr->wm_delete_win = wm_delete_reply->atom;
     state_ptr->wm_protocols = wm_protocols_reply->atom;
 
     xcb_change_property(
-        state_ptr->connection,
+        state_ptr->handle.connection,
         XCB_PROP_MODE_REPLACE,
-        state_ptr->window,
+        state_ptr->handle.window,
         wm_protocols_reply->atom,
         4,
         32,
@@ -166,10 +180,10 @@ b8 platform_system_startup(u64* memory_requirement, void* state, void* config) {
         &wm_delete_reply->atom);
 
     // Map the window to the screen
-    xcb_map_window(state_ptr->connection, state_ptr->window);
+    xcb_map_window(state_ptr->handle.connection, state_ptr->handle.window);
 
     // Flush the stream
-    i32 stream_result = xcb_flush(state_ptr->connection);
+    i32 stream_result = xcb_flush(state_ptr->handle.connection);
     if (stream_result <= 0) {
         KFATAL("An error occurred when flusing the stream: %d", stream_result);
         return false;
@@ -183,7 +197,7 @@ void platform_system_shutdown(void* plat_state) {
         // Turn key repeats back on since this is global for the OS... just... wow.
         XAutoRepeatOn(state_ptr->display);
 
-        xcb_destroy_window(state_ptr->connection, state_ptr->window);
+        xcb_destroy_window(state_ptr->handle.connection, state_ptr->handle.window);
     }
 }
 
@@ -195,7 +209,7 @@ b8 platform_pump_messages() {
         b8 quit_flagged = false;
 
         // Poll for events until null is returned.
-        while ((event = xcb_poll_for_event(state_ptr->connection))) {
+        while ((event = xcb_poll_for_event(state_ptr->handle.connection))) {
             // Input events
             switch (event->response_type & ~0x80) {
                 case XCB_KEY_PRESS:
@@ -274,6 +288,10 @@ b8 platform_pump_messages() {
 
             free(event);
         }
+
+        // Update watches.
+        platform_update_watches();
+
         return !quit_flagged;
     }
     return true;
@@ -332,6 +350,15 @@ i32 platform_get_processor_count() {
     i32 processors_available = get_nprocs();
     KINFO("%i processor cores detected, %i cores available.", processor_count, processors_available);
     return processors_available;
+}
+
+void platform_get_handle_info(u64* out_size, void* memory) {
+    *out_size = sizeof(linux_handle_info);
+    if (!memory) {
+        return;
+    }
+
+    kcopy_memory(memory, &state_ptr->handle, *out_size);
 }
 
 // NOTE: Begin threads.
@@ -441,7 +468,6 @@ u64 get_thread_id() {
 }
 // NOTE: End threads.
 
-
 // NOTE: Begin mutexes
 b8 kmutex_create(kmutex* out_mutex) {
     if (!out_mutex) {
@@ -541,32 +567,228 @@ b8 kmutex_unlock(kmutex* mutex) {
 }
 // NOTE: End mutexes
 
-void platform_get_required_extension_names(const char*** names_darray) {
-    darray_push(*names_darray, &"VK_KHR_xcb_surface");  // VK_KHR_xlib_surface?
+const char* platform_dynamic_library_extension() {
+    return ".so";
 }
 
-// Surface creation for Vulkan
-b8 platform_create_vulkan_surface(vulkan_context* context) {
-    if (!state_ptr) {
+const char *platform_dynamic_library_prefix() {
+    return "./lib";
+}
+
+platform_error_code platform_copy_file(const char* source, const char* dest, b8 overwrite_if_exists) {
+    platform_error_code ret_code = PLATFORM_ERROR_SUCCESS;
+    i32 source_fd = -1;
+    i32 dest_fd = -1;
+
+    // Obtain a file descriptor for the source file.
+    source_fd = open(source, O_RDONLY);
+    if (source_fd == -1) {
+        if (errno == ENOENT) {
+            KERROR("Source file does not exist: %s", source);
+        }
+        return PLATFORM_ERROR_FILE_NOT_FOUND;
+    }
+
+    // Stat the file to obtain it's attributes (e.g. size).
+    struct stat source_stat;
+    i32 result = fstat(source_fd, &source_stat);
+    if (result != 0) {
+        if (errno == ENOENT) {
+            KERROR("Source file does not exist: %s", source);
+        }
+        ret_code = PLATFORM_ERROR_FILE_NOT_FOUND;
+        goto close_handles;
+    }
+
+    u64 size = (u64)source_stat.st_size;
+
+    // Obtain a file descriptor for the source file.
+    dest_fd = open(dest, O_WRONLY | O_CREAT);
+    if (dest_fd == -1) {
+        if (errno == ENOENT) {
+            KERROR("Destination file could not be created: %s", dest);
+        }
+
+        ret_code = PLATFORM_ERROR_FILE_LOCKED;
+        goto close_handles;
+    }
+
+    // Copy the data. Iterate to handle large files, since Linux has a limit
+    // on the amount that can be copied at once.
+    while (size > 0) {
+        ssize_t sent = sendfile(dest_fd, source_fd, NULL, (size >= SSIZE_MAX ? SSIZE_MAX : (size_t)size));
+        if (sent < 0) {
+            if (errno != EINVAL && errno != ENOSYS) {
+                ret_code = PLATFORM_ERROR_UNKNOWN;
+                goto close_handles;
+            } else {
+                break;
+            }
+        } else {
+            KASSERT((size_t)sent <= size);
+            size -= (size_t)sent;
+        }
+    }
+
+    // Copy file times. Stat the source file again to make sure it's up to date.
+    result = fstat(source_fd, &source_stat);
+    if (result != 0) {
+        ret_code = PLATFORM_ERROR_FILE_NOT_FOUND;
+        goto close_handles;
+    } else {
+        struct timeval dest_times[2];
+        // Update last access time.
+        dest_times[0].tv_sec = source_stat.st_atime;
+        dest_times[0].tv_usec = source_stat.st_atim.tv_nsec / 1000;
+        // Update last modify time.
+        dest_times[1].tv_sec = source_stat.st_mtime;
+        dest_times[1].tv_usec = source_stat.st_mtim.tv_nsec / 1000;
+        result = futimes(dest_fd, dest_times);
+        // If an error is returned, treat as the destination file being locked.
+        if (result != 0) {
+            ret_code = PLATFORM_ERROR_FILE_LOCKED;
+            goto close_handles;
+        }
+    }
+
+    // Copy permissions.
+    result = fchmod(dest_fd, source_stat.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO));
+    // If an error is returned, treat as the destination file being locked.
+    if (result != 0) {
+        ret_code = PLATFORM_ERROR_FILE_LOCKED;
+        goto close_handles;
+    }
+
+close_handles:
+    if (source_fd != -1) {
+        result = close(source_fd);
+        if (result != 0) {
+            KERROR("Error closing source file: %s", source);
+        }
+    }
+    if (dest_fd != -1) {
+        result = close(dest_fd);
+        if (result != 0) {
+            KERROR("Error closing destination file: %s", source);
+        }
+    }
+
+    return ret_code;
+}
+
+static b8 register_watch(const char *file_path, u32 *out_watch_id) {
+    if (!state_ptr || !file_path || !out_watch_id) {
+        if (out_watch_id) {
+            *out_watch_id = INVALID_ID;
+        }
+        return false;
+    }
+    *out_watch_id = INVALID_ID;
+
+    if (!state_ptr->watches) {
+        state_ptr->watches = darray_create(linux_file_watch);
+    }
+
+    struct stat info;
+    int result = stat(file_path, &info);
+    if(result != 0) {
+        if(errno == ENOENT) {
+            // File doesn't exist. TODO: report?
+        }
         return false;
     }
 
-    VkXcbSurfaceCreateInfoKHR create_info = {VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR};
-    create_info.connection = state_ptr->connection;
-    create_info.window = state_ptr->window;
-
-    VkResult result = vkCreateXcbSurfaceKHR(
-        context->instance,
-        &create_info,
-        context->allocator,
-        &state_ptr->surface);
-    if (result != VK_SUCCESS) {
-        KFATAL("Vulkan surface creation failed.");
-        return false;
+    u32 count = darray_length(state_ptr->watches);
+    for (u32 i = 0; i < count; ++i) {
+        linux_file_watch *w = &state_ptr->watches[i];
+        if (w->id == INVALID_ID) {
+            // Found a free slot to use.
+            w->id = i;
+            w->file_path = string_duplicate(file_path);
+            w->last_write_time = info.st_mtime;
+            *out_watch_id = i;
+            return true;
+        }
     }
 
-    context->surface = state_ptr->surface;
+    // If no empty slot is available, create and push a new entry.
+    linux_file_watch w = {0};
+    w.id = count;
+    w.file_path = string_duplicate(file_path);
+    w.last_write_time = info.st_mtime;
+    *out_watch_id = count;
+    darray_push(state_ptr->watches, w);
+
     return true;
+}
+
+static b8 unregister_watch(u32 watch_id) {
+    if (!state_ptr || !state_ptr->watches) {
+        return false;
+    }
+
+    u32 count = darray_length(state_ptr->watches);
+    if (count == 0 || watch_id > (count - 1)) {
+        return false;
+    }
+
+    linux_file_watch *w = &state_ptr->watches[watch_id];
+    w->id = INVALID_ID;
+    u32 len = string_length(w->file_path);
+    kfree((void *)w->file_path, sizeof(char) * (len + 1), MEMORY_TAG_STRING);
+    w->file_path = 0;
+    kzero_memory(&w->last_write_time, sizeof(long));
+
+    return true;
+}
+
+b8 platform_watch_file(const char *file_path, u32 *out_watch_id) {
+    return register_watch(file_path, out_watch_id);
+}
+
+b8 platform_unwatch_file(u32 watch_id) {
+    return unregister_watch(watch_id);
+}
+
+void platform_update_watches() {
+    if (!state_ptr || !state_ptr->watches) {
+        return;
+    }
+
+    u32 count = darray_length(state_ptr->watches);
+    for (u32 i = 0; i < count; ++i) {
+        linux_file_watch *f = &state_ptr->watches[i];
+        if (f->id != INVALID_ID) {
+
+            struct stat info;
+            int result = stat(f->file_path, &info);
+            if(result != 0) {
+                if(errno == ENOENT) {
+                    // File doesn't exist. Which means it was deleted. Remove the watch.
+                    event_context context = {0};
+                    context.data.u32[0] = f->id;
+                    event_fire(EVENT_CODE_WATCHED_FILE_DELETED, 0, context);
+                    KINFO("File watch id %d has been removed.", f->id);
+                    unregister_watch(f->id);
+                    continue;
+                } else {
+                    KWARN("Some other error occurred on file watch id %d", f->id);
+                }
+                // NOTE: some other error has occurred. TODO: Handle?
+                continue;
+            }
+
+            // Check the file time to see if it has been changed and update/notify if so.
+            if (info.st_mtime - f->last_write_time != 0) {
+                KTRACE("File update found.");
+                f->last_write_time = info.st_mtime;
+                // Notify listeners.
+                event_context context = {0};
+                context.data.u32[0] = f->id;
+                event_fire(EVENT_CODE_WATCHED_FILE_WRITTEN, 0, context);
+            }
+        }
+    }
 }
 
 // Key translation

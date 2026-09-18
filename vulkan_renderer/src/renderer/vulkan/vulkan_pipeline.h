@@ -3,12 +3,12 @@
  * @author Syed Nofel Talha (syednofeltalha2@gmail.com)
  * @brief This file contains a Vulkan pipeline, which is responsible for combining
  * items such as the shader modules, attributes, uniforms/descriptors, viewport/scissor,
- * etc. 
+ * etc.
  * @version 1.0
  * @date 2026-01-11
- * 
+ *
  * @copyright Ignis Game Engine is Copyright (c) Syed Nofel Talha 2025-2026
- * 
+ *
  */
 
 #pragma once

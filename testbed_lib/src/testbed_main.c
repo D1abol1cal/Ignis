@@ -1,4 +1,5 @@
-#include "game.h"
+#include "testbed_main.h"
+#include "game_state.h"
 
 #include <core/logger.h>
 #include <core/kmemory.h>
@@ -31,6 +32,8 @@
 // TODO: end temp
 
 b8 configure_render_views(application_config* config);
+void application_register_events(struct application* game_inst);
+void application_unregister_events(struct application* game_inst);
 
 b8 game_on_event(u16 code, void* sender, void* listener_inst, event_context context) {
     application* game_inst = (application*)listener_inst;
@@ -115,10 +118,17 @@ b8 game_on_key(u16 code, void* sender, void* listener_inst, event_context contex
     return false;
 }
 
-b8 game_boot(struct application* game_inst) {
+u64 application_state_size() {
+    return sizeof(game_state);
+}
+
+b8 application_boot(struct application* game_inst) {
     KINFO("Booting testbed...");
 
-    debug_console_create();
+    // Allocate the game state.
+    game_inst->state = kallocate(sizeof(game_state), MEMORY_TAG_GAME);
+
+    debug_console_create(&((game_state*)game_inst->state)->debug_console);
 
     // Setup the frame allocator.
     linear_allocator_create(MEBIBYTES(64), 0, &game_inst->frame_allocator);
@@ -163,10 +173,12 @@ b8 game_boot(struct application* game_inst) {
     return true;
 }
 
-b8 game_initialize(application* game_inst) {
+b8 application_initialize(struct application* game_inst) {
     KDEBUG("game_initialize() called!");
 
-    debug_console_load();
+    application_register_events(game_inst);
+
+    debug_console_load(&((game_state*)game_inst->state)->debug_console);
 
     game_state* state = (game_state*)game_inst->state;
 
@@ -304,21 +316,12 @@ b8 game_initialize(application* game_inst) {
     // Move and rotate it some.
     // quat rotation = quat_from_axis_angle((vec3){0, 0, 1}, deg_to_rad(-45.0f), false);
     // transform_translate_rotate(&state->ui_meshes[0].transform, (vec3){5, 5, 0}, rotation);
-    transform_translate(&state->ui_meshes[0].transform, (vec3){650, 5, 0});
+    transform_translate(&state->ui_meshes[0].transform, (vec3){0, 0, 0});
 
     // TODO: end temp load/prepare stuff
 
     state->world_camera = camera_system_get_default();
     camera_position_set(state->world_camera, (vec3){10.5f, 5.0f, 9.5f});
-
-    // TODO: temp
-    event_register(EVENT_CODE_DEBUG0, game_inst, game_on_debug_event);
-    event_register(EVENT_CODE_DEBUG1, game_inst, game_on_debug_event);
-    event_register(EVENT_CODE_OBJECT_HOVER_ID_CHANGED, game_inst, game_on_event);
-    // TODO: end temp
-
-    event_register(EVENT_CODE_KEY_PRESSED, game_inst, game_on_key);
-    event_register(EVENT_CODE_KEY_RELEASED, game_inst, game_on_key);
 
     kzero_memory(&game_inst->frame_data, sizeof(app_frame_data));
 
@@ -331,28 +334,7 @@ b8 game_initialize(application* game_inst) {
     return true;
 }
 
-void game_shutdown(application* game_inst) {
-    game_state* state = (game_state*)game_inst->state;
-
-    // TODO: Temp
-    skybox_destroy(&state->sb);
-
-    // Destroy ui texts
-    ui_text_destroy(&state->test_text);
-    ui_text_destroy(&state->test_sys_text);
-
-    debug_console_unload();
-
-    event_unregister(EVENT_CODE_DEBUG0, game_inst, game_on_debug_event);
-    event_unregister(EVENT_CODE_DEBUG1, game_inst, game_on_debug_event);
-    event_unregister(EVENT_CODE_OBJECT_HOVER_ID_CHANGED, game_inst, game_on_event);
-    // TODO: end temp
-
-    event_unregister(EVENT_CODE_KEY_PRESSED, game_inst, game_on_key);
-    event_unregister(EVENT_CODE_KEY_RELEASED, game_inst, game_on_key);
-}
-
-b8 game_update(application* game_inst, f32 delta_time) {
+b8 application_update(struct application* game_inst, f32 delta_time) {
     // Ensure this is cleaned up to avoid leaking memory.
     // TODO: Need a version of this that uses the frame allocator.
     if (game_inst->frame_data.world_geometries) {
@@ -384,6 +366,10 @@ b8 game_update(application* game_inst, f32 delta_time) {
 
     // Perform a similar rotation on the third mesh, if it exists.
     transform_rotate(&state->meshes[2].transform, rotation);
+
+    // Logo position, kept here (instead of application_initialize) so it can
+    // be tweaked and hot-reloaded without restarting the engine.
+    transform_set_position(&state->ui_meshes[0].transform, (vec3){0, 0, 0});
 
     // Update the bitmap text with camera position. NOTE: just using the default camera for now.
     camera* world_camera = camera_system_get_default();
@@ -501,7 +487,7 @@ VSync: %s Drawn: %-5u Hovered: %s%u",
         state->hovered_object_id == INVALID_ID ? 0 : state->hovered_object_id);
     ui_text_set_text(&state->test_text, text_buffer);
 
-    debug_console_update();
+    debug_console_update(&((game_state*)game_inst->state)->debug_console);
 
     clock_update(&state->update_clock);
     state->last_update_elapsed = state->update_clock.elapsed;
@@ -509,7 +495,7 @@ VSync: %s Drawn: %-5u Hovered: %s%u",
     return true;
 }
 
-b8 game_render(application* game_inst, struct render_packet* packet, f32 delta_time) {
+b8 application_render(struct application* game_inst, struct render_packet* packet, f32 delta_time) {
     game_state* state = (game_state*)game_inst->state;
 
     clock_start(&state->render_clock);
@@ -552,8 +538,8 @@ b8 game_render(application* game_inst, struct render_packet* packet, f32 delta_t
     ui_packet.mesh_data.mesh_count = ui_mesh_count;
     ui_packet.mesh_data.meshes = ui_meshes;
     ui_packet.text_count = 2;
-    ui_text* debug_console_text = debug_console_get_text();
-    b8 render_debug_conole = debug_console_text && debug_console_visible();
+    ui_text* debug_console_text = debug_console_get_text(&state->debug_console);
+    b8 render_debug_conole = debug_console_text && debug_console_visible(&state->debug_console);
     if (render_debug_conole) {
         ui_packet.text_count += 2;
     }
@@ -562,7 +548,7 @@ b8 game_render(application* game_inst, struct render_packet* packet, f32 delta_t
     texts[1] = &state->test_sys_text;
     if (render_debug_conole) {
         texts[2] = debug_console_text;
-        texts[3] = debug_console_get_entry_text();
+        texts[3] = debug_console_get_entry_text(&state->debug_console);
     }
 
     ui_packet.texts = texts;
@@ -589,7 +575,11 @@ b8 game_render(application* game_inst, struct render_packet* packet, f32 delta_t
     return true;
 }
 
-void game_on_resize(application* game_inst, u32 width, u32 height) {
+void application_on_resize(struct application* game_inst, u32 width, u32 height) {
+    if (!game_inst->state) {
+        return;
+    }
+
     game_state* state = (game_state*)game_inst->state;
 
     state->width = width;
@@ -599,6 +589,75 @@ void game_on_resize(application* game_inst, u32 width, u32 height) {
     // Move debug text to new bottom of screen.
     ui_text_set_position(&state->test_text, vec3_create(20, state->height - 75, 0));
     // TODO: end temp
+}
+
+void application_shutdown(struct application* game_inst) {
+    game_state* state = (game_state*)game_inst->state;
+
+    // TODO: Temp
+    skybox_destroy(&state->sb);
+
+    // Destroy ui texts
+    ui_text_destroy(&state->test_text);
+    ui_text_destroy(&state->test_sys_text);
+
+    debug_console_unload(&state->debug_console);
+}
+
+void application_lib_on_unload(struct application* game_inst) {
+    application_unregister_events(game_inst);
+    debug_console_on_lib_unload(&((game_state*)game_inst->state)->debug_console);
+    game_remove_commands(game_inst);
+    game_remove_keymaps(game_inst);
+}
+
+void application_lib_on_load(struct application* game_inst) {
+    application_register_events(game_inst);
+    debug_console_on_lib_load(&((game_state*)game_inst->state)->debug_console, game_inst->stage >= APPLICATION_STAGE_BOOT_COMPLETE);
+    if (game_inst->stage >= APPLICATION_STAGE_BOOT_COMPLETE) {
+        game_setup_commands(game_inst);
+        game_setup_keymaps(game_inst);
+    }
+}
+
+static void toggle_vsync() {
+    b8 vsync_enabled = renderer_flag_enabled(RENDERER_CONFIG_FLAG_VSYNC_ENABLED_BIT);
+    vsync_enabled = !vsync_enabled;
+    renderer_flag_set_enabled(RENDERER_CONFIG_FLAG_VSYNC_ENABLED_BIT, vsync_enabled);
+}
+
+static b8 game_on_kvar_changed(u16 code, void* sender, void* listener_inst, event_context data) {
+    if (code == EVENT_CODE_KVAR_CHANGED && strings_equali(data.data.c, "vsync")) {
+        toggle_vsync();
+    }
+    return false;
+}
+
+void application_register_events(struct application* game_inst) {
+    if (game_inst->stage >= APPLICATION_STAGE_BOOT_COMPLETE) {
+        // TODO: temp
+        event_register(EVENT_CODE_DEBUG0, game_inst, game_on_debug_event);
+        event_register(EVENT_CODE_DEBUG1, game_inst, game_on_debug_event);
+        event_register(EVENT_CODE_OBJECT_HOVER_ID_CHANGED, game_inst, game_on_event);
+        // TODO: end temp
+
+        event_register(EVENT_CODE_KEY_PRESSED, game_inst, game_on_key);
+        event_register(EVENT_CODE_KEY_RELEASED, game_inst, game_on_key);
+
+        event_register(EVENT_CODE_KVAR_CHANGED, 0, game_on_kvar_changed);
+    }
+}
+
+void application_unregister_events(struct application* game_inst) {
+    event_unregister(EVENT_CODE_DEBUG0, game_inst, game_on_debug_event);
+    event_unregister(EVENT_CODE_DEBUG1, game_inst, game_on_debug_event);
+    event_unregister(EVENT_CODE_OBJECT_HOVER_ID_CHANGED, game_inst, game_on_event);
+    // TODO: end temp
+
+    event_unregister(EVENT_CODE_KEY_PRESSED, game_inst, game_on_key);
+    event_unregister(EVENT_CODE_KEY_RELEASED, game_inst, game_on_key);
+
+    event_unregister(EVENT_CODE_KVAR_CHANGED, 0, game_on_kvar_changed);
 }
 
 b8 configure_render_views(application_config* config) {

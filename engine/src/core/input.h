@@ -327,7 +327,7 @@ void input_system_shutdown(void* state);
 /**
  * @brief Updates the input system every frame.
  * @param delta_time The delta time in seconds since the last frame.
- * TODO(travis): refactor to use system manager update, with state, but must be called at end of frame.
+ * TODO(Nofel): refactor to use system manager update, with state, but must be called at end of frame.
  */
 void input_update(f64 delta_time);
 
@@ -441,4 +441,4 @@ KAPI const char* input_keycode_str(keys key);
 
 KAPI void input_keymap_push(const struct keymap* map);
 
-KAPI void input_keymap_pop();
+KAPI b8 input_keymap_pop();

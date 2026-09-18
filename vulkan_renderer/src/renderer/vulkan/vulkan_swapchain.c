@@ -279,7 +279,7 @@ void create(vulkan_context* context, u32 width, u32 height, renderer_config_flag
 
         // Wrap it in a texture.
         texture_system_wrap_internal(
-            "__ignis_default_depth_texture__",
+            "__Ignis_default_depth_texture__",
             swapchain_extent.width,
             swapchain_extent.height,
             context->device.depth_channel_count,
