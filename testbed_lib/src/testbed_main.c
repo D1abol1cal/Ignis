@@ -367,6 +367,11 @@ b8 application_update(struct application* game_inst, f32 delta_time) {
     // Perform a similar rotation on the third mesh, if it exists.
     transform_rotate(&state->meshes[2].transform, rotation);
 
+    // Spin the falcon too, once it's actually been loaded.
+    if (state->models_loaded) {
+        transform_rotate(&state->car_mesh->transform, rotation);
+    }
+
     // Logo position, kept here (instead of application_initialize) so it can
     // be tweaked and hot-reloaded without restarting the engine.
     transform_set_position(&state->ui_meshes[0].transform, (vec3){0, 0, 0});
@@ -617,6 +622,15 @@ void application_lib_on_load(struct application* game_inst) {
     if (game_inst->stage >= APPLICATION_STAGE_BOOT_COMPLETE) {
         game_setup_commands(game_inst);
         game_setup_keymaps(game_inst);
+
+        // Load the falcon model live, into a running scene.
+        game_state* state = (game_state*)game_inst->state;
+        if (!state->models_loaded) {
+            state->models_loaded = true;
+            if (!mesh_load_from_resource("falcon", state->car_mesh)) {
+                KERROR("Failed to load falcon mesh!");
+            }
+        }
     }
 }
 
