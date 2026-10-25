@@ -4,6 +4,7 @@
 #include "core/kmutex.h"
 #include "core/kmemory.h"
 #include "core/logger.h"
+#include "core/frame_data.h"
 #include "containers/ring_queue.h"
 
 typedef struct job_thread {
@@ -171,7 +172,7 @@ b8 job_system_initialize(u64* job_system_memory_requirement, void* state, void* 
         state_ptr->pending_results[i].id = INVALID_ID_U16;
     }
 
-    KDEBUG("Main thread id is: %#x", get_thread_id());
+    KDEBUG("Main thread id is: %#x", platform_current_thread_id());
 
     KDEBUG("Spawning %i job threads.", state_ptr->thread_count);
 
@@ -282,7 +283,7 @@ void process_queue(ring_queue* queue, kmutex* queue_mutex) {
     }
 }
 
-b8 job_system_update(void* state, f32 delta_time) {
+b8 job_system_update(void* state, const struct frame_data* p_frame_data) {
     if (!state_ptr || !state_ptr->running) {
         return false;
     }

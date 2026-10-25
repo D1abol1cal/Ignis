@@ -48,6 +48,8 @@ typedef enum memory_tag {
     MEMORY_TAG_GPU_LOCAL,
     MEMORY_TAG_BITMAP_FONT,
     MEMORY_TAG_SYSTEM_FONT,
+    MEMORY_TAG_KEYMAP,
+    MEMORY_TAG_HASHTABLE,
 
     MEMORY_TAG_MAX_TAGS
 } memory_tag;
@@ -168,10 +170,10 @@ KAPI void* kset_memory(void* dest, i32 value, u64 size);
  * @deprecated This function should be discontinued in favour of something more robust in the future.
  * @returns A pointer to a character array containing the string representation of memory usage.
  */
-KAPI char* get_memory_usage_str();
+KAPI char* get_memory_usage_str(void);
 
 /**
  * @brief Obtains the number of times kallocate was called since the memory system was initialized.
  * @returns The total count of allocations since the system's initialization.
  */
-KAPI u64 get_memory_alloc_count();
+KAPI u64 get_memory_alloc_count(void);

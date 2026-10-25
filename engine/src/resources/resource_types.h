@@ -31,18 +31,20 @@ typedef enum resource_type {
     RESOURCE_TYPE_BITMAP_FONT,
     /** @brief System font resource type. */
     RESOURCE_TYPE_SYSTEM_FONT,
+    /** @brief Simple scene resource type. */
+    RESOURCE_TYPE_SIMPLE_SCENE,
     /** @brief Custom resource type. Used by loaders outside the core engine. */
     RESOURCE_TYPE_CUSTOM
 } resource_type;
 
-/** @brief A magic number indicating the file as a Ignis binary file. */
+/** @brief A magic number indicating the file as a ignis binary file. */
 #define RESOURCE_MAGIC 0xcafebabe
 
 /**
  * @brief The header data for binary resource types.
  */
 typedef struct resource_header {
-    /** @brief A magic number indicating the file as a Ignis binary file. */
+    /** @brief A magic number indicating the file as a ignis binary file. */
     u32 magic_number;
     /** @brief The resource type. Maps to the enum resource_type. */
     u8 resource_type;
@@ -351,7 +353,18 @@ typedef struct geometry {
     material* material;
 } geometry;
 
+struct geometry_config;
+typedef struct mesh_config {
+    char* name;
+    char* parent_name;
+    char* resource_name;
+    u16 geometry_count;
+    struct geometry_config* g_configs;
+} mesh_config;
+
 typedef struct mesh {
+    char* name;
+    mesh_config config;
     u32 unique_id;
     u8 generation;
     u16 geometry_count;
@@ -431,7 +444,7 @@ typedef struct shader_uniform_config {
     /** @brief The name of the uniform. */
     char* name;
     /** @brief The size of the uniform. */
-    u8 size;
+    u16 size;
     /** @brief The location of the uniform. */
     u32 location;
     /** @brief The type of the uniform. */
@@ -480,3 +493,43 @@ typedef struct shader_config {
      */
     b8 depth_write;
 } shader_config;
+
+typedef struct skybox_simple_scene_config {
+    char* name;
+    char* cubemap_name;
+} skybox_simple_scene_config;
+
+typedef struct directional_light_simple_scene_config {
+    char* name;
+    vec4 colour;
+    vec4 direction;
+} directional_light_simple_scene_config;
+
+typedef struct point_light_simple_scene_config {
+    char* name;
+    vec4 colour;
+    vec4 position;
+    f32 constant_f;
+    f32 linear;
+    f32 quadratic;
+} point_light_simple_scene_config;
+
+typedef struct mesh_simple_scene_config {
+    char* name;
+    char* resource_name;
+    transform transform;
+    char* parent_name;  // optional
+} mesh_simple_scene_config;
+
+typedef struct simple_scene_config {
+    char* name;
+    char* description;
+    skybox_simple_scene_config skybox_config;
+    directional_light_simple_scene_config directional_light_config;
+
+    // darray
+    point_light_simple_scene_config* point_lights;
+
+    // darray
+    mesh_simple_scene_config* meshes;
+} simple_scene_config;

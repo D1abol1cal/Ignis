@@ -120,4 +120,3 @@ b8 hashtable_fill(hashtable* table, void* value) {
 
     return true;
 }
- 

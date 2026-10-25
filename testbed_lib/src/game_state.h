@@ -10,11 +10,12 @@
 #include <resources/ui_text.h>
 #include <core/clock.h>
 #include <core/keymap.h>
+#include <systems/light_system.h>
+#include <resources/simple_scene.h>
 
 #include "debug_console.h"
 
-typedef struct game_state {
-    f32 delta_time;
+typedef struct testbed_game_state {
     camera* world_camera;
 
     u16 width, height;
@@ -26,12 +27,12 @@ typedef struct game_state {
     f64 last_update_elapsed;
 
     // TODO: temp
-    skybox sb;
+    simple_scene main_scene;
+    b8 main_scene_unload_triggered;
 
     mesh meshes[10];
-    mesh* car_mesh;
-    mesh* sponza_mesh;
-    b8 models_loaded;
+
+    point_light* p_light_1;
 
     mesh ui_meshes[10];
     ui_text test_text;
@@ -47,5 +48,8 @@ typedef struct game_state {
     u64 alloc_count;
     u64 prev_alloc_count;
     // TODO: end temp
-} game_state;
+} testbed_game_state;
 
+typedef struct testbed_application_frame_data {
+    i32 dummy;
+} testbed_application_frame_data;

@@ -41,7 +41,9 @@ static const char* memory_tag_strings[MEMORY_TAG_MAX_TAGS] = {
     "OPENGL     ",
     "GPU_LOCAL  ",
     "BITMAP_FONT",
-    "SYSTEM_FONT"};
+    "SYSTEM_FONT",
+    "KEYMAP     ",
+    "HASHTABLE  "};
 
 typedef struct memory_system_state {
     memory_system_configuration config;
@@ -67,7 +69,7 @@ b8 memory_system_initialize(memory_system_configuration config) {
 
     // Call the platform allocator to get the memory for the whole system, including the state.
     // TODO: memory alignment
-    void* block = platform_allocate(state_memory_requirement + alloc_requirement, false);
+    void* block = platform_allocate(state_memory_requirement + alloc_requirement, true);
     if (!block) {
         KFATAL("Memory system allocation failed and the system cannot continue.");
         return false;
@@ -140,7 +142,7 @@ void* kallocate_aligned(u64 size, u16 alignment, memory_tag tag) {
         kmutex_unlock(&state_ptr->allocation_mutex);
     } else {
         // If the system is not up yet, warn about it but give memory for now.
-        KWARN("kallocate_aligned called before the memory system is initialized.");
+        KTRACE("Warning: kallocate_aligned called before the memory system is initialized.");
         // TODO: Memory alignment
         block = platform_allocate(size, false);
     }
@@ -246,7 +248,7 @@ const char* get_unit_for_size(u64 size_bytes, f32* out_amount) {
     }
 }
 
-char* get_memory_usage_str() {
+char* get_memory_usage_str(void) {
     char buffer[8000] = "System memory use (tagged):\n";
     u64 offset = strlen(buffer);
     for (u32 i = 0; i < MEMORY_TAG_MAX_TAGS; ++i) {
@@ -278,7 +280,7 @@ char* get_memory_usage_str() {
     return out_string;
 }
 
-u64 get_memory_alloc_count() {
+u64 get_memory_alloc_count(void) {
     if (state_ptr) {
         return state_ptr->alloc_count;
     }

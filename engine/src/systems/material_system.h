@@ -32,7 +32,7 @@ typedef struct material_system_config {
  *
  * @param memory_requirement A pointer to hold the memory requirement as it is calculated.
  * @param state A block of memory to hold the state or, if gathering the memory requirement, 0.
- * @param config The configuration for this system.
+ * @param config The configuration (material_system_config) for this system.
  * @return True on success; otherwise false.
  */
 b8 material_system_initialize(u64* memory_requirement, void* state, void* config);
@@ -76,11 +76,11 @@ KAPI void material_system_release(const char* name);
 /**
  * @brief Gets a pointer to the default material. Does not reference count.
  */
-KAPI material* material_system_get_default();
+KAPI material* material_system_get_default(void);
 
 /**
  * @brief Applies global-level data for the material shader id.
- * 
+ *
  * @param shader_id The identifier of the shader to apply globals for.
  * @param renderer_frame_number The renderer's current frame number.
  * @param projection A constant pointer to a projection matrix.
@@ -109,3 +109,8 @@ KAPI b8 material_system_apply_instance(material* m, b8 needs_update);
  * @return True on success; otherwise false.
  */
 KAPI b8 material_system_apply_local(material* m, const mat4* model);
+
+/**
+ * @brief Dumps all of the registered materials and their reference counts/handles.
+ */
+KAPI void material_system_dump(void);

@@ -3,9 +3,9 @@
  * @author Syed Nofel Talha (syednofeltalha2@gmail.com)
  * @brief Code shared by unix-like platforms (i.e. Linux and macOS).
  * @version 1.0
- * @date 2023-02-04
+ * @date 2026-02-04
  *
- * @copyright Ignis Game Engine is Copyright (c) Syed Nofel Talha 2021-2023
+ * @copyright Ignis Game Engine is Copyright (c) Syed Nofel Talha 2021-2026
  *
  */
 

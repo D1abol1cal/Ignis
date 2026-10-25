@@ -3,6 +3,8 @@
 #include "core/logger.h"
 #include "core/kmemory.h"
 #include "core/kvar.h"
+#include "core/frame_data.h"
+#include "core/kstring.h"
 #include "containers/freelist.h"
 #include "math/kmath.h"
 #include "platform/platform.h"
@@ -90,7 +92,7 @@ void renderer_on_resized(u16 width, u16 height) {
     }
 }
 
-b8 renderer_draw_frame(render_packet* packet) {
+b8 renderer_draw_frame(render_packet* packet, const struct frame_data* p_frame_data) {
     renderer_system_state* state_ptr = (renderer_system_state*)systems_manager_get_state(K_SYSTEM_TYPE_RENDERER);
     state_ptr->plugin.frame_number++;
 
@@ -120,7 +122,7 @@ b8 renderer_draw_frame(render_packet* packet) {
     }
 
     // If the begin frame returned successfully, mid-frame operations may continue.
-    if (state_ptr->plugin.begin_frame(&state_ptr->plugin, packet->delta_time)) {
+    if (state_ptr->plugin.begin_frame(&state_ptr->plugin, p_frame_data)) {
         u8 attachment_index = state_ptr->plugin.window_attachment_index_get(&state_ptr->plugin);
 
         // Render each view.
@@ -132,7 +134,7 @@ b8 renderer_draw_frame(render_packet* packet) {
         }
 
         // End the frame. If this fails, it is likely unrecoverable.
-        b8 result = state_ptr->plugin.end_frame(&state_ptr->plugin, packet->delta_time);
+        b8 result = state_ptr->plugin.end_frame(&state_ptr->plugin, p_frame_data);
 
         if (!result) {
             KERROR("renderer_end_frame failed. Application shutting down...");
@@ -148,7 +150,7 @@ void renderer_viewport_set(vec4 rect) {
     state_ptr->plugin.viewport_set(&state_ptr->plugin, rect);
 }
 
-void renderer_viewport_reset() {
+void renderer_viewport_reset(void) {
     renderer_system_state* state_ptr = (renderer_system_state*)systems_manager_get_state(K_SYSTEM_TYPE_RENDERER);
     state_ptr->plugin.viewport_reset(&state_ptr->plugin);
 }
@@ -158,7 +160,7 @@ void renderer_scissor_set(vec4 rect) {
     state_ptr->plugin.scissor_set(&state_ptr->plugin, rect);
 }
 
-void renderer_scissor_reset() {
+void renderer_scissor_reset(void) {
     renderer_system_state* state_ptr = (renderer_system_state*)systems_manager_get_state(K_SYSTEM_TYPE_RENDERER);
     state_ptr->plugin.scissor_reset(&state_ptr->plugin);
 }
@@ -312,12 +314,12 @@ texture* renderer_depth_attachment_get(u8 index) {
     return state_ptr->plugin.depth_attachment_get(&state_ptr->plugin, index);
 }
 
-u8 renderer_window_attachment_index_get() {
+u8 renderer_window_attachment_index_get(void) {
     renderer_system_state* state_ptr = (renderer_system_state*)systems_manager_get_state(K_SYSTEM_TYPE_RENDERER);
     return state_ptr->plugin.window_attachment_index_get(&state_ptr->plugin);
 }
 
-u8 renderer_window_attachment_count_get() {
+u8 renderer_window_attachment_count_get(void) {
     renderer_system_state* state_ptr = (renderer_system_state*)systems_manager_get_state(K_SYSTEM_TYPE_RENDERER);
     return state_ptr->plugin.window_attachment_count_get(&state_ptr->plugin);
 }
@@ -339,6 +341,7 @@ b8 renderer_renderpass_create(const renderpass_config* config, renderpass* out_r
     out_renderpass->clear_flags = config->clear_flags;
     out_renderpass->clear_colour = config->clear_colour;
     out_renderpass->render_area = config->render_area;
+    out_renderpass->name = string_duplicate(config->name);
 
     // Copy over config for each target.
     for (u32 t = 0; t < out_renderpass->render_target_count; ++t) {
@@ -369,10 +372,15 @@ void renderer_renderpass_destroy(renderpass* pass) {
         renderer_render_target_destroy(&pass->targets[i], true);
     }
 
+    if (pass->name) {
+        kfree(pass->name, string_length(pass->name) + 1, MEMORY_TAG_STRING);
+        pass->name = 0;
+    }
+
     state_ptr->plugin.renderpass_destroy(&state_ptr->plugin, pass);
 }
 
-b8 renderer_is_multithreaded() {
+b8 renderer_is_multithreaded(void) {
     renderer_system_state* state_ptr = (renderer_system_state*)systems_manager_get_state(K_SYSTEM_TYPE_RENDERER);
     return state_ptr->plugin.is_multithreaded(&state_ptr->plugin);
 }

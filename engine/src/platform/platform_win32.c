@@ -32,6 +32,8 @@ typedef struct win32_file_watch {
 
 typedef struct platform_state {
     win32_handle_info handle;
+    CONSOLE_SCREEN_BUFFER_INFO std_output_csbi;
+    CONSOLE_SCREEN_BUFFER_INFO err_output_csbi;
     // darray
     win32_file_watch *watches;
 } platform_state;
@@ -42,10 +44,10 @@ static platform_state *state_ptr;
 static f64 clock_frequency;
 static LARGE_INTEGER start_time;
 
-void platform_update_watches();
+void platform_update_watches(void);
 LRESULT CALLBACK win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARAM l_param);
 
-void clock_setup() {
+void clock_setup(void) {
     LARGE_INTEGER frequency;
     QueryPerformanceFrequency(&frequency);
     clock_frequency = 1.0 / (f64)frequency.QuadPart;
@@ -60,6 +62,9 @@ b8 platform_system_startup(u64 *memory_requirement, void *state, void *config) {
     }
     state_ptr = state;
     state_ptr->handle.h_instance = GetModuleHandleA(0);
+
+    GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &state_ptr->std_output_csbi);
+    GetConsoleScreenBufferInfo(GetStdHandle(STD_ERROR_HANDLE), &state_ptr->err_output_csbi);
 
     // Setup and register window class.
     HICON icon = LoadIcon(state_ptr->handle.h_instance, IDI_APPLICATION);
@@ -144,7 +149,7 @@ void platform_system_shutdown(void *plat_state) {
     }
 }
 
-b8 platform_pump_messages() {
+b8 platform_pump_messages(void) {
     if (state_ptr) {
         MSG message;
         while (PeekMessageA(&message, NULL, 0, 0, PM_REMOVE)) {
@@ -157,11 +162,13 @@ b8 platform_pump_messages() {
 }
 
 void *platform_allocate(u64 size, b8 aligned) {
-    return malloc(size);
+    // return malloc(size);
+    return (void *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size);
 }
 
 void platform_free(void *block, b8 aligned) {
-    free(block);
+    // free(block);
+    HeapFree(GetProcessHeap(), 0, block);
 }
 
 void *platform_zero_memory(void *block, u64 size) {
@@ -185,10 +192,19 @@ void platform_console_write(const char *message, u8 colour) {
     u64 length = strlen(message);
     DWORD number_written = 0;
     WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), message, (DWORD)length, &number_written, 0);
+
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    if (state_ptr) {
+        csbi = state_ptr->std_output_csbi;
+    } else {
+        GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
+    }
+    SetConsoleTextAttribute(console_handle, csbi.wAttributes);
 }
 
 void platform_console_write_error(const char *message, u8 colour) {
     HANDLE console_handle = GetStdHandle(STD_ERROR_HANDLE);
+
     // FATAL,ERROR,WARN,INFO,DEBUG,TRACE
     static u8 levels[6] = {64, 4, 6, 2, 1, 8};
     SetConsoleTextAttribute(console_handle, levels[colour]);
@@ -196,9 +212,17 @@ void platform_console_write_error(const char *message, u8 colour) {
     u64 length = strlen(message);
     DWORD number_written = 0;
     WriteConsoleA(GetStdHandle(STD_ERROR_HANDLE), message, (DWORD)length, &number_written, 0);
+
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    if (state_ptr) {
+        csbi = state_ptr->err_output_csbi;
+    } else {
+        GetConsoleScreenBufferInfo(GetStdHandle(STD_ERROR_HANDLE), &csbi);
+    }
+    SetConsoleTextAttribute(console_handle, csbi.wAttributes);
 }
 
-f64 platform_get_absolute_time() {
+f64 platform_get_absolute_time(void) {
     if (!clock_frequency) {
         clock_setup();
     }
@@ -212,7 +236,7 @@ void platform_sleep(u64 ms) {
     Sleep(ms);
 }
 
-i32 platform_get_processor_count() {
+i32 platform_get_processor_count(void) {
     SYSTEM_INFO sysinfo;
     GetSystemInfo(&sysinfo);
     KINFO("%i processor cores detected.", sysinfo.dwNumberOfProcessors);
@@ -292,7 +316,7 @@ void kthread_sleep(kthread *thread, u64 ms) {
     platform_sleep(ms);
 }
 
-u64 get_thread_id() {
+u64 platform_current_thread_id(void) {
     return (u64)GetCurrentThreadId();
 }
 
@@ -448,11 +472,11 @@ b8 platform_dynamic_library_load_function(const char *name, dynamic_library *lib
     return true;
 }
 
-const char *platform_dynamic_library_extension() {
+const char *platform_dynamic_library_extension(void) {
     return ".dll";
 }
 
-const char* platform_dynamic_library_prefix() {
+const char *platform_dynamic_library_prefix(void) {
     return "";
 }
 
@@ -546,7 +570,7 @@ b8 platform_unwatch_file(u32 watch_id) {
     return unregister_watch(watch_id);
 }
 
-void platform_update_watches() {
+void platform_update_watches(void) {
     if (!state_ptr || !state_ptr->watches) {
         return;
     }

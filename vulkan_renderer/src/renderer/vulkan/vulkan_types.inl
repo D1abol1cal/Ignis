@@ -131,6 +131,8 @@ typedef struct vulkan_image {
     u32 width;
     /** @brief The image height. */
     u32 height;
+    /** @brief The name of the image. */
+    char* name;
 } vulkan_image;
 
 /** @brief Represents the possible states of a renderpass. */
@@ -508,9 +510,6 @@ typedef struct vulkan_shader {
  * global renderer backend state, Vulkan instance, etc.
  */
 typedef struct vulkan_context {
-    /** @brief The time in seconds since the last frame. */
-    f32 frame_delta_time;
-
     /** @brief The framebuffer's current width. */
     u32 framebuffer_width;
 
@@ -539,6 +538,15 @@ typedef struct vulkan_context {
 #if defined(_DEBUG)
     /** @brief The debug messenger, if active.. */
     VkDebugUtilsMessengerEXT debug_messenger;
+
+    /** @brief The function pointer to set debug object names. */
+    PFN_vkSetDebugUtilsObjectNameEXT pfnSetDebugUtilsObjectNameEXT;
+
+    /** @brief The function pointer to set free-form debug object tag data. */
+    PFN_vkSetDebugUtilsObjectTagEXT pfnSetDebugUtilsObjectTagEXT;
+
+    PFN_vkCmdBeginDebugUtilsLabelEXT pfnCmdBeginDebugUtilsLabelEXT;
+    PFN_vkCmdEndDebugUtilsLabelEXT pfnCmdEndDebugUtilsLabelEXT;
 #endif
 
     /** @brief The Vulkan device. */

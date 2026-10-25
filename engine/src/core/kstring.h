@@ -23,7 +23,7 @@ KAPI u64 string_length(const char* str);
 
 /**
  * @brief Gets the length of a string in UTF-8 (potentially multibyte) characters.
- * 
+ *
  * @param str The string to examine.
  * @return The UTF-8 length of the string.
  */
@@ -32,7 +32,7 @@ KAPI u32 string_utf8_length(const char* str);
 /**
  * @brief Obtains bytes needed from the byte array to form a UTF-8 codepoint,
  * also providing how many bytes the current character is.
- * 
+ *
  * @param bytes The byte array to choose from.
  * @param offset The offset in bytes to start from.
  * @param out_codepoint A pointer to hold the UTF-8 codepoint.
@@ -51,7 +51,7 @@ KAPI char* string_duplicate(const char* str);
 
 /**
  * @brief Frees the memory of the given string.
- * 
+ *
  * @param str The string to be freed.
  */
 KAPI void string_free(char* str);
@@ -147,7 +147,7 @@ KAPI char* string_trim(char* str);
 
 /**
  * @brief Gets a substring of the source string between start and length or to the end of the string.
- * If length is negative or 0, goes to the end of the string.
+ * If length is negative, goes to the end of the string.
  *
  * Done by placing zeroes in the string at relevant points.
  * @param str The string to be trimmed.
@@ -162,6 +162,18 @@ KAPI void string_mid(char* dest, const char* source, i32 start, i32 length);
  * @return The index of the first occurance of c; otherwise -1 if not found.
  */
 KAPI i32 string_index_of(const char* str, char c);
+
+/**
+ * @brief Attempts to parse a transform from the provided string.
+ * If the string contains 10 elements, rotation is parsed as quaternion.
+ * If it contains 9 elements, rotation is parsed as euler angles and is 
+ * converted to quaternion. Anything else is invalid.
+ * 
+ * @param str The string to parse from.
+ * @param out_transform A pointer to the transform to write to.
+ * @return True if parsed successfully, otherwise false.
+ */
+KAPI b8 string_to_transform(const char* str, transform* out_transform);
 
 /**
  * @brief Attempts to parse a vector from the provided string.

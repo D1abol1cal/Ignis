@@ -1,7 +1,7 @@
 #include "keymap.h"
 #include "core/kmemory.h"
 
-keymap keymap_create() {
+keymap keymap_create(void) {
     keymap map;
     kzero_memory(&map, sizeof(keymap));
 
@@ -25,7 +25,7 @@ void keymap_binding_add(keymap* map, keys key, keymap_entry_bind_type type, keym
             node = node->next;
         }
 
-        keymap_binding* new_entry = kallocate(sizeof(keymap_binding), MEMORY_TAG_UNKNOWN);
+        keymap_binding* new_entry = kallocate(sizeof(keymap_binding), MEMORY_TAG_KEYMAP);
         new_entry->callback = callback;
         new_entry->modifiers = modifiers;
         new_entry->type = type;
@@ -49,7 +49,7 @@ void keymap_binding_remove(keymap* map, keys key, keymap_entry_bind_type type, k
             if (node->callback == callback && node->modifiers == modifiers && node->type == type) {
                 // Remove it
                 previous->next = node->next;
-                kfree(node, sizeof(keymap_binding), MEMORY_TAG_UNKNOWN);
+                kfree(node, sizeof(keymap_binding), MEMORY_TAG_KEYMAP);
                 return;
             }
             previous = node;
@@ -67,7 +67,7 @@ void keymap_clear(keymap* map) {
             while (node) {
                 // Remove all nodes
                 previous->next = node->next;
-                kfree(node, sizeof(keymap_binding), MEMORY_TAG_UNKNOWN);
+                kfree(node, sizeof(keymap_binding), MEMORY_TAG_KEYMAP);
                 previous = node;
                 node = node->next;
             }

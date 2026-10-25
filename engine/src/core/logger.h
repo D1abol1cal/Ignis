@@ -50,6 +50,7 @@ typedef enum log_level {
  * 
  * @param memory_requirement A pointer to hold the required memory size of internal state.
  * @param state 0 if just requesting memory requirement, otherwise allocated block of memory.
+ * @param config Ignored.
  * @return b8 True on success; otherwise false.
  */
 b8 logging_initialize(u64* memory_requirement, void* state, void* config);

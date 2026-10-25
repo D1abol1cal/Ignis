@@ -7,7 +7,7 @@
 #include <platform/platform.h>
 
 typedef b8 (*PFN_plugin_create)(renderer_plugin* out_plugin);
-typedef u64 (*PFN_application_state_size)();
+typedef u64 (*PFN_application_state_size)(void);
 
 b8 load_game_lib(application* app) {
     // Dynamically load game library
@@ -112,11 +112,6 @@ b8 create_application(application* out_application) {
     out_application->app_config.start_width = 1280;
     out_application->app_config.start_height = 720;
     out_application->app_config.name = "Ignis Engine Testbed";
-
-    // Dynamically load game library
-    // if (!platform_dynamic_library_load("libtestbed_lib_loaded", &out_application->game_library)) {
-    //     return false;
-    // }
 
     platform_error_code err_code = PLATFORM_ERROR_FILE_LOCKED;
     while (err_code == PLATFORM_ERROR_FILE_LOCKED) {

@@ -30,7 +30,7 @@ b8 add_attribute(shader* shader, const shader_attribute_config* config);
 b8 add_sampler(shader* shader, shader_uniform_config* config);
 b8 add_uniform(shader* shader, shader_uniform_config* config);
 u32 get_shader_id(const char* shader_name);
-u32 new_shader_id();
+u32 new_shader_id(void);
 b8 uniform_add(shader* shader, const char* uniform_name, u32 size, shader_uniform_type type, shader_scope scope, u32 set_location, b8 is_sampler);
 b8 uniform_name_valid(shader* shader, const char* uniform_name);
 b8 shader_uniform_add_state_valid(shader* shader);
@@ -132,7 +132,7 @@ b8 shader_system_create(renderpass* pass, const shader_config* config) {
     // 'uniforms' array stored in the shader for quick lookups by name.
     u64 element_size = sizeof(u16);  // Indexes are stored as u16s.
     u64 element_count = 1024;        // This is more uniforms than we will ever need, but a bigger table reduces collision chance.
-    out_shader->hashtable_block = kallocate(element_size * element_count, MEMORY_TAG_UNKNOWN);
+    out_shader->hashtable_block = kallocate(element_size * element_count, MEMORY_TAG_HASHTABLE);
     hashtable_create(element_size, element_count, out_shader->hashtable_block, false, &out_shader->uniform_lookup);
 
     // Invalidate all spots in the hashtable.
@@ -323,7 +323,7 @@ b8 shader_system_sampler_set_by_index(u16 index, const texture* t) {
     return shader_system_uniform_set_by_index(index, t);
 }
 
-b8 shader_system_apply_global() {
+b8 shader_system_apply_global(void) {
     return renderer_shader_apply_globals(&state_ptr->shaders[state_ptr->current_shader_id]);
 }
 b8 shader_system_apply_instance(b8 needs_update) {
@@ -407,16 +407,19 @@ b8 add_sampler(shader* shader, shader_uniform_config* config) {
         default_map.filter_minify = TEXTURE_FILTER_MODE_LINEAR;
         default_map.repeat_u = default_map.repeat_v = default_map.repeat_w = TEXTURE_REPEAT_REPEAT;
         default_map.use = TEXTURE_USE_UNKNOWN;
-        if (!renderer_texture_map_acquire_resources(&default_map)) {
-            KERROR("Failed to acquire resources for global texture map during shader creation.");
-            return false;
-        }
+        
 
         // Allocate a pointer assign the texture, and push into global texture maps.
         // NOTE: This allocation is only done for global texture maps.
         texture_map* map = kallocate(sizeof(texture_map), MEMORY_TAG_RENDERER);
         *map = default_map;
         map->texture = texture_system_get_default_texture();
+
+        if (!renderer_texture_map_acquire_resources(&default_map)) {
+            KERROR("Failed to acquire resources for global texture map during shader creation.");
+            return false;
+        }
+        
         darray_push(shader->global_texture_maps, map);
     } else {
         // Otherwise, it's instance-level, so keep count of how many need to be added during the resource acquisition.
@@ -456,7 +459,7 @@ u32 get_shader_id(const char* shader_name) {
     return shader_id;
 }
 
-u32 new_shader_id() {
+u32 new_shader_id(void) {
     for (u32 i = 0; i < state_ptr->config.max_shader_count; ++i) {
         if (state_ptr->shaders[i].id == INVALID_ID) {
             return i;
