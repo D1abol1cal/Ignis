@@ -1,8 +1,8 @@
 #include "skybox.h"
 
-#include "core/logger.h"
 #include "core/kmemory.h"
 #include "core/kstring.h"
+#include "core/logger.h"
 #include "renderer/renderer_frontend.h"
 #include "systems/geometry_system.h"
 #include "systems/shader_system.h"
@@ -27,7 +27,6 @@ b8 skybox_initialize(skybox* sb) {
     texture_map* cube_map = &sb->cubemap;
     cube_map->filter_magnify = cube_map->filter_minify = TEXTURE_FILTER_MODE_LINEAR;
     cube_map->repeat_u = cube_map->repeat_v = cube_map->repeat_w = TEXTURE_REPEAT_CLAMP_TO_EDGE;
-    cube_map->use = TEXTURE_USE_MAP_CUBEMAP;
 
     sb->instance_id = INVALID_ID;
 
@@ -45,7 +44,7 @@ b8 skybox_load(skybox* sb) {
     }
 
     sb->cubemap.texture = texture_system_acquire_cube(sb->config.cubemap_name, true);
-    if (!renderer_texture_map_acquire_resources(&sb->cubemap)) {
+    if (!renderer_texture_map_resources_acquire(&sb->cubemap)) {
         KFATAL("Unable to acquire resources for cube map texture.");
         return false;
     }
@@ -55,7 +54,7 @@ b8 skybox_load(skybox* sb) {
 
     shader* skybox_shader = shader_system_get("Shader.Builtin.Skybox");  // TODO: allow configurable shader.
     texture_map* maps[1] = {&sb->cubemap};
-    if (!renderer_shader_acquire_instance_resources(skybox_shader, maps, &sb->instance_id)) {
+    if (!renderer_shader_instance_resources_acquire(skybox_shader, 1, maps, &sb->instance_id)) {
         KFATAL("Unable to acquire shader resources for skybox texture.");
         return false;
     }
@@ -70,9 +69,9 @@ b8 skybox_unload(skybox* sb) {
     }
 
     shader* skybox_shader = shader_system_get("Shader.Builtin.Skybox");  // TODO: allow configurable shader.
-    renderer_shader_release_instance_resources(skybox_shader, sb->instance_id);
+    renderer_shader_instance_resources_release(skybox_shader, sb->instance_id);
     sb->instance_id = INVALID_ID;
-    renderer_texture_map_release_resources(&sb->cubemap);
+    renderer_texture_map_resources_release(&sb->cubemap);
 
     sb->render_frame_number = INVALID_ID_U64;
 

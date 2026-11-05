@@ -11,3 +11,4 @@ assets/
 **/tmpclaude-*-cwd
 tmpclaude-*-cwd
 .claude/
+**/compile_flags.txt

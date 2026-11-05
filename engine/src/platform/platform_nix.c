@@ -5,7 +5,7 @@
  * @version 1.0
  * @date 2026-02-04
  *
- * @copyright Ignis Game Engine is Copyright (c) Syed Nofel Talha 2021-2026
+ * @copyright Ignis Game Engine is Copyright (c) Syed Nofel Talha 2025-2026
  *
  */
 

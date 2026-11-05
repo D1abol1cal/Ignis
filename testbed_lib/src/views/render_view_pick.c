@@ -1,20 +1,20 @@
 #include "render_view_pick.h"
 
-#include "core/logger.h"
-#include "core/kmemory.h"
+#include "containers/darray.h"
 #include "core/event.h"
+#include "core/kmemory.h"
 #include "core/kstring.h"
+#include "core/logger.h"
 #include "core/uuid.h"
 #include "math/kmath.h"
 #include "math/transform.h"
 #include "memory/linear_allocator.h"
-#include "containers/darray.h"
-#include "systems/resource_system.h"
-#include "systems/shader_system.h"
-#include "systems/camera_system.h"
-#include "systems/render_view_system.h"
 #include "renderer/renderer_frontend.h"
 #include "resources/ui_text.h"
+#include "systems/camera_system.h"
+#include "systems/render_view_system.h"
+#include "systems/resource_system.h"
+#include "systems/shader_system.h"
 
 typedef struct render_view_pick_shader_info {
     shader* s;
@@ -33,6 +33,7 @@ typedef struct render_view_pick_shader_info {
 typedef struct render_view_pick_internal_data {
     render_view_pick_shader_info ui_shader_info;
     render_view_pick_shader_info world_shader_info;
+    render_view_pick_shader_info terrain_shader_info;
 
     // Used as the colour attachment for both renderpasses.
     texture colour_target_attachment_texture;
@@ -46,7 +47,7 @@ typedef struct render_view_pick_internal_data {
     // u32 render_mode;
 } render_view_pick_internal_data;
 
-b8 on_mouse_moved(u16 code, void* sender, void* listener_inst, event_context event_data) {
+static b8 on_mouse_moved(u16 code, void* sender, void* listener_inst, event_context event_data) {
     if (code == EVENT_CODE_MOUSE_MOVED) {
         render_view* self = (render_view*)listener_inst;
         render_view_pick_internal_data* data = (render_view_pick_internal_data*)self->internal_data;
@@ -71,7 +72,7 @@ static b8 render_view_on_event(u16 code, void* sender, void* listener_inst, even
 
     switch (code) {
         case EVENT_CODE_DEFAULT_RENDERTARGET_REFRESH_REQUIRED:
-            render_view_system_regenerate_render_targets(self);
+            render_view_system_render_targets_regenerate(self);
             // This needs to be consumed by other views, so consider it _not_ handled.
             return false;
     }
@@ -79,19 +80,24 @@ static b8 render_view_on_event(u16 code, void* sender, void* listener_inst, even
     return false;
 }
 
-void acquire_shader_instances(const struct render_view* self) {
+static void acquire_shader_instances(const struct render_view* self) {
     render_view_pick_internal_data* data = self->internal_data;
 
     // Not saving the instance id because it doesn't matter.
     u32 instance;
     // UI shader
-    if (!renderer_shader_acquire_instance_resources(data->ui_shader_info.s, 0, &instance)) {
-        KFATAL("render_view_pick failed to acquire shader resources.");
+    if (!renderer_shader_instance_resources_acquire(data->ui_shader_info.s, 0, 0, &instance)) {
+        KFATAL("render_view_pick failed to acquire UI shader resources.");
         return;
     }
     // World shader
-    if (!renderer_shader_acquire_instance_resources(data->world_shader_info.s, 0, &instance)) {
-        KFATAL("render_view_pick failed to acquire shader resources.");
+    if (!renderer_shader_instance_resources_acquire(data->world_shader_info.s, 0, 0, &instance)) {
+        KFATAL("render_view_pick failed to acquire World shader resources.");
+        return;
+    }
+    // Terrain shader
+    if (!renderer_shader_instance_resources_acquire(data->terrain_shader_info.s, 0, 0, &instance)) {
+        KFATAL("render_view_pick failed to acquire Terrain shader resources.");
         return;
     }
     data->instance_count++;
@@ -103,19 +109,24 @@ void release_shader_instances(const struct render_view* self) {
 
     for (i32 i = 0; i < data->instance_count; ++i) {
         // UI shader
-        if (!renderer_shader_release_instance_resources(data->ui_shader_info.s, i)) {
-            KWARN("Failed to release shader resources.");
+        if (!renderer_shader_instance_resources_release(data->ui_shader_info.s, i)) {
+            KWARN("Failed to release UI shader resources.");
         }
 
         // World shader
-        if (!renderer_shader_release_instance_resources(data->world_shader_info.s, i)) {
-            KWARN("Failed to release shader resources.");
+        if (!renderer_shader_instance_resources_release(data->world_shader_info.s, i)) {
+            KWARN("Failed to release world shader resources.");
+        }
+
+        // Terrain shader
+        if (!renderer_shader_instance_resources_release(data->terrain_shader_info.s, i)) {
+            KWARN("Failed to release terrain shader resources.");
         }
     }
     darray_destroy(data->instance_updated);
 }
 
-b8 render_view_pick_on_create(struct render_view* self) {
+b8 render_view_pick_on_registered(struct render_view* self) {
     if (self) {
         self->internal_data = kallocate(sizeof(render_view_pick_internal_data), MEMORY_TAG_RENDERER);
         render_view_pick_internal_data* data = self->internal_data;
@@ -125,6 +136,7 @@ b8 render_view_pick_on_create(struct render_view* self) {
         // NOTE: In this heavily-customized view, the exact number of passes is known, so
         // these index assumptions are fine.
         data->world_shader_info.pass = &self->passes[0];
+        data->terrain_shader_info.pass = &self->passes[0];
         data->ui_shader_info.pass = &self->passes[1];
 
         // Builtin UI Pick shader.
@@ -177,10 +189,37 @@ b8 render_view_pick_on_create(struct render_view* self) {
 
         // Default World properties
         data->world_shader_info.near_clip = 0.1f;
-        data->world_shader_info.far_clip = 1000.0f;
+        data->world_shader_info.far_clip = 4000.0f;
         data->world_shader_info.fov = deg_to_rad(45.0f);
         data->world_shader_info.projection = mat4_perspective(data->world_shader_info.fov, 1280 / 720.0f, data->world_shader_info.near_clip, data->world_shader_info.far_clip);
         data->world_shader_info.view = mat4_identity();
+
+        // Builtin Terrain Pick shader.
+        const char* terrain_shader_name = "Shader.Builtin.TerrainPick";
+        if (!resource_system_load(terrain_shader_name, RESOURCE_TYPE_SHADER, 0, &config_resource)) {
+            KERROR("Failed to load builtin Terrain Pick shader.");
+            return false;
+        }
+        config = (shader_config*)config_resource.data;
+        if (!shader_system_create(data->terrain_shader_info.pass, config)) {
+            KERROR("Failed to load builtin Terrain Pick shader.");
+            return false;
+        }
+        resource_system_unload(&config_resource);
+        data->terrain_shader_info.s = shader_system_get(terrain_shader_name);
+
+        // Extract uniform locations.
+        data->terrain_shader_info.id_colour_location = shader_system_uniform_index(data->terrain_shader_info.s, "id_colour");
+        data->terrain_shader_info.model_location = shader_system_uniform_index(data->terrain_shader_info.s, "model");
+        data->terrain_shader_info.projection_location = shader_system_uniform_index(data->terrain_shader_info.s, "projection");
+        data->terrain_shader_info.view_location = shader_system_uniform_index(data->terrain_shader_info.s, "view");
+
+        // Default terrain properties.
+        data->terrain_shader_info.near_clip = 0.1f;
+        data->terrain_shader_info.far_clip = 4000.0f;
+        data->terrain_shader_info.fov = deg_to_rad(45.0f);
+        data->terrain_shader_info.projection = mat4_perspective(data->terrain_shader_info.fov, 1280 / 720.0f, data->terrain_shader_info.near_clip, data->terrain_shader_info.far_clip);
+        data->terrain_shader_info.view = mat4_identity();
 
         data->instance_count = 0;
 
@@ -235,6 +274,9 @@ void render_view_pick_on_resize(struct render_view* self, u32 width, u32 height)
     f32 aspect = (f32)self->width / self->height;
     data->world_shader_info.projection = mat4_perspective(data->world_shader_info.fov, aspect, data->world_shader_info.near_clip, data->world_shader_info.far_clip);
 
+    // Terrain
+    data->terrain_shader_info.projection = mat4_perspective(data->terrain_shader_info.fov, aspect, data->terrain_shader_info.near_clip, data->terrain_shader_info.far_clip);
+
     for (u32 i = 0; i < self->renderpass_count; ++i) {
         self->passes[i].render_area.x = 0;
         self->passes[i].render_area.y = 0;
@@ -243,9 +285,9 @@ void render_view_pick_on_resize(struct render_view* self, u32 width, u32 height)
     }
 }
 
-b8 render_view_pick_on_build_packet(const struct render_view* self, struct linear_allocator* frame_allocator, void* data, struct render_view_packet* out_packet) {
+b8 render_view_pick_on_packet_build(const struct render_view* self, struct linear_allocator* frame_allocator, void* data, struct render_view_packet* out_packet) {
     if (!self || !data || !out_packet) {
-        KWARN("render_view_pick_on_build_packet requires valid pointer to view, packet, and data.");
+        KWARN("render_view_pick_on_packet_build requires valid pointer to view, packet, and data.");
         return false;
     }
 
@@ -253,11 +295,13 @@ b8 render_view_pick_on_build_packet(const struct render_view* self, struct linea
     render_view_pick_internal_data* internal_data = (render_view_pick_internal_data*)self->internal_data;
 
     out_packet->geometries = darray_create(geometry_render_data);
+    out_packet->terrain_geometries = darray_create(geometry_render_data);
     out_packet->view = self;
 
     // TODO: Get active camera.
     camera* world_camera = camera_system_get_default();
     internal_data->world_shader_info.view = camera_view_get(world_camera);
+    internal_data->terrain_shader_info.view = camera_view_get(world_camera);
 
     // Set the pick packet data to extended data.
     packet_data->ui_geometry_count = 0;
@@ -268,11 +312,24 @@ b8 render_view_pick_on_build_packet(const struct render_view* self, struct linea
     u32 highest_instance_id = 0;
     // Iterate all geometries in world data.
     for (u32 i = 0; i < world_geometry_count; ++i) {
-       darray_push(out_packet->geometries, packet_data->world_mesh_data[i]);
+        darray_push(out_packet->geometries, packet_data->world_mesh_data[i]);
 
         // Count all geometries as a single id.
         if (packet_data->world_mesh_data[i].unique_id > highest_instance_id) {
             highest_instance_id = packet_data->world_mesh_data[i].unique_id;
+        }
+    }
+
+    // Iterate all terrains in the world data.
+    u32 terrain_geometry_count = !packet_data->terrain_mesh_data ? 0 : darray_length(packet_data->terrain_mesh_data);
+
+    // Iterate all geometries in terrain data.
+    for (u32 i = 0; i < terrain_geometry_count; ++i) {
+        darray_push(out_packet->terrain_geometries, packet_data->terrain_mesh_data[i]);
+
+        // Count all geometries as a single id.
+        if (packet_data->terrain_mesh_data[i].unique_id > highest_instance_id) {
+            highest_instance_id = packet_data->terrain_mesh_data[i].unique_id;
         }
     }
 
@@ -282,11 +339,10 @@ b8 render_view_pick_on_build_packet(const struct render_view* self, struct linea
         for (u32 j = 0; j < m->geometry_count; ++j) {
             geometry_render_data render_data;
             render_data.geometry = m->geometries[j];
-            render_data.model = transform_get_world(&m->transform);
+            render_data.model = transform_world_get(&m->transform);
             render_data.unique_id = m->unique_id;
             darray_push(out_packet->geometries, render_data);
             out_packet->geometry_count++;
-            packet_data->ui_geometry_count++;
         }
         // Count all geometries as a single id.
         if (m->unique_id > highest_instance_id) {
@@ -318,18 +374,24 @@ b8 render_view_pick_on_build_packet(const struct render_view* self, struct linea
     return true;
 }
 
-void render_view_pick_on_destroy_packet(const struct render_view* self, struct render_view_packet* packet) {
+void render_view_pick_on_packet_destroy(const struct render_view* self, struct render_view_packet* packet) {
     darray_destroy(packet->geometries);
+    darray_destroy(packet->terrain_geometries);
     kzero_memory(packet, sizeof(render_view_packet));
 }
 
-b8 render_view_pick_on_render(const struct render_view* self, const struct render_view_packet* packet, u64 frame_number, u64 render_target_index) {
+b8 render_view_pick_on_render(const struct render_view* self, const struct render_view_packet* packet, u64 frame_number, u64 render_target_index, const struct frame_data* p_frame_data) {
     render_view_pick_internal_data* data = self->internal_data;
 
     u32 p = 0;
     renderpass* pass = &self->passes[p];  // First pass
 
     if (render_target_index == 0) {
+        pick_packet_data* packet_data = (pick_packet_data*)packet->extended_data;
+        if (!packet_data) {
+            return true;
+        }
+
         // Reset.
         u64 count = darray_length(data->instance_updated);
         for (u64 i = 0; i < count; ++i) {
@@ -340,8 +402,6 @@ b8 render_view_pick_on_render(const struct render_view* self, const struct rende
             KERROR("render_view_ui_on_render pass index %u failed to start.", p);
             return false;
         }
-
-        pick_packet_data* packet_data = (pick_packet_data*)packet->extended_data;
 
         i32 current_instance_id = 0;
 
@@ -358,7 +418,7 @@ b8 render_view_pick_on_render(const struct render_view* self, const struct rende
         if (!shader_system_uniform_set_by_index(data->world_shader_info.view_location, &data->world_shader_info.view)) {
             KERROR("Failed to apply view matrix");
         }
-        shader_system_apply_global();
+        shader_system_apply_global(true);
 
         // Draw geometries. Start from 0 since world geometries are added first, and stop at the world geometry count.
         u32 world_geometry_count = !packet_data->world_mesh_data ? 0 : darray_length(packet_data->world_mesh_data);
@@ -388,11 +448,58 @@ b8 render_view_pick_on_render(const struct render_view* self, const struct rende
             }
 
             // Draw it.
-            renderer_draw_geometry(&packet->geometries[i]);
+            renderer_geometry_draw(&packet->geometries[i]);
+        }
+        // End world geometries
+
+        // Terrain geometries
+        if (!shader_system_use_by_id(data->terrain_shader_info.s->id)) {
+            KERROR("Failed to use terrain pick shader. Render frame failed.");
+            return false;
+        }
+
+        // Apply globals
+        if (!shader_system_uniform_set_by_index(data->terrain_shader_info.projection_location, &data->terrain_shader_info.projection)) {
+            KERROR("Failed to apply projection matrix");
+        }
+        if (!shader_system_uniform_set_by_index(data->terrain_shader_info.view_location, &data->terrain_shader_info.view)) {
+            KERROR("Failed to apply view matrix");
+        }
+        shader_system_apply_global(true);
+
+        // Draw geometries. Start from 0 since terrain geometries are added first, and stop at the terrain geometry count.
+        u32 terrain_geometry_count = !packet_data->terrain_mesh_data ? 0 : darray_length(packet_data->terrain_mesh_data);
+        for (u32 i = 0; i < terrain_geometry_count; ++i) {
+            geometry_render_data* geo = &packet->terrain_geometries[i];
+            current_instance_id = geo->unique_id;
+
+            shader_system_bind_instance(current_instance_id);
+
+            // Get colour based on id
+            vec3 id_colour;
+            u32 r, g, b;
+            u32_to_rgb(geo->unique_id, &r, &g, &b);
+            rgb_u32_to_vec3(r, g, b, &id_colour);
+            if (!shader_system_uniform_set_by_index(data->terrain_shader_info.id_colour_location, &id_colour)) {
+                KERROR("Failed to apply id colour uniform.");
+                return false;
+            }
+
+            b8 needs_update = !data->instance_updated[current_instance_id];
+            shader_system_apply_instance(needs_update);
+            data->instance_updated[current_instance_id] = true;
+
+            // Apply the locals
+            if (!shader_system_uniform_set_by_index(data->terrain_shader_info.model_location, &geo->model)) {
+                KERROR("Failed to apply model matrix for terrain geometry.");
+            }
+
+            // Draw it.
+            renderer_geometry_draw(&packet->terrain_geometries[i]);
         }
 
         if (!renderer_renderpass_end(pass)) {
-            KERROR("render_view_ui_on_render pass index %u failed to end.", p);
+            KERROR("render_view_pick_on_render pass index %u failed to end.", p);
             return false;
         }
 
@@ -400,7 +507,7 @@ b8 render_view_pick_on_render(const struct render_view* self, const struct rende
         pass = &self->passes[p];  // Second pass
 
         if (!renderer_renderpass_begin(pass, &pass->targets[render_target_index])) {
-            KERROR("render_view_ui_on_render pass index %u failed to start.", p);
+            KERROR("render_view_pick_on_render pass index %u failed to start.", p);
             return false;
         }
 
@@ -417,7 +524,7 @@ b8 render_view_pick_on_render(const struct render_view* self, const struct rende
         if (!shader_system_uniform_set_by_index(data->ui_shader_info.view_location, &data->ui_shader_info.view)) {
             KERROR("Failed to apply view matrix");
         }
-        shader_system_apply_global();
+        shader_system_apply_global(true);
 
         // Draw geometries. Start off where world geometries left off.
         for (u32 i = world_geometry_count; i < packet->geometry_count; ++i) {
@@ -446,7 +553,7 @@ b8 render_view_pick_on_render(const struct render_view* self, const struct rende
             }
 
             // Draw it.
-            renderer_draw_geometry(&packet->geometries[i]);
+            renderer_geometry_draw(&packet->geometries[i]);
         }
 
         // Draw bitmap text
@@ -468,7 +575,7 @@ b8 render_view_pick_on_render(const struct render_view* self, const struct rende
             shader_system_apply_instance(true);
 
             // Apply the locals
-            mat4 model = transform_get_world(&text->transform);
+            mat4 model = transform_world_get(&text->transform);
             if (!shader_system_uniform_set_by_index(data->ui_shader_info.model_location, &model)) {
                 KERROR("Failed to apply model matrix for text");
             }
@@ -509,7 +616,7 @@ b8 render_view_pick_on_render(const struct render_view* self, const struct rende
     return true;
 }
 
-b8 render_view_pick_regenerate_attachment_target(struct render_view* self, u32 pass_index, struct render_target_attachment* attachment) {
+b8 render_view_pick_attachment_target_regenerate(struct render_view* self, u32 pass_index, struct render_target_attachment* attachment) {
     render_view_pick_internal_data* data = self->internal_data;
 
     if (attachment->type == RENDER_TARGET_ATTACHMENT_TYPE_COLOUR) {

@@ -1,22 +1,18 @@
 #include "render_view_system.h"
 
 #include "containers/hashtable.h"
-#include "core/logger.h"
 #include "core/kmemory.h"
 #include "core/kstring.h"
+#include "core/logger.h"
 #include "renderer/renderer_frontend.h"
-
-// TODO: temporary - make factory and register instead.
-#include "renderer/views/render_view_world.h"
-#include "renderer/views/render_view_ui.h"
-#include "renderer/views/render_view_skybox.h"
-#include "renderer/views/render_view_pick.h"
+#include "renderer/renderer_types.inl"
 
 typedef struct render_view_system_state {
     hashtable lookup;
     void* table_block;
     u32 max_view_count;
-    render_view* registered_views;
+    // Array of pointer to views, owned by the application.
+    render_view** registered_views;
 } render_view_system_state;
 
 static render_view_system_state* state_ptr = 0;
@@ -31,7 +27,7 @@ b8 render_view_system_initialize(u64* memory_requirement, void* state, void* con
     // Block of memory will contain state structure, then block for hashtable, then block for array.
     u64 struct_requirement = sizeof(render_view_system_state);
     u64 hashtable_requirement = sizeof(u16) * typed_config->max_view_count;
-    u64 array_requirement = sizeof(render_view) * typed_config->max_view_count;
+    u64 array_requirement = sizeof(render_view*) * typed_config->max_view_count;
     *memory_requirement = struct_requirement + hashtable_requirement + array_requirement;
 
     if (!state) {
@@ -54,10 +50,8 @@ b8 render_view_system_initialize(u64* memory_requirement, void* state, void* con
     u16 invalid_id = INVALID_ID_U16;
     hashtable_fill(&state_ptr->lookup, &invalid_id);
 
-    // Fill the array with invalid entries.
-    for (u32 i = 0; i < state_ptr->max_view_count; ++i) {
-        state_ptr->registered_views[i].id = INVALID_ID_U16;
-    }
+    // Make absolutely sure the array is zeroed.
+    kzero_memory(state_ptr->registered_views, sizeof(render_view*) * state_ptr->max_view_count);
 
     return true;
 }
@@ -65,8 +59,8 @@ b8 render_view_system_initialize(u64* memory_requirement, void* state, void* con
 void render_view_system_shutdown(void* state) {
     // Destroy all views in the system.
     for (u32 i = 0; i < state_ptr->max_view_count; ++i) {
-        render_view* view = &state_ptr->registered_views[i];
-        if (view->id != INVALID_ID_U16) {
+        render_view* view = state_ptr->registered_views[i];
+        if (view) {
             // Call its destroy routine first.
             view->on_destroy(view);
 
@@ -74,41 +68,39 @@ void render_view_system_shutdown(void* state) {
             for (u32 p = 0; p < view->renderpass_count; ++p) {
                 renderer_renderpass_destroy(&view->passes[p]);
             }
-
-            view->id = INVALID_ID_U16;
         }
     }
 
     state_ptr = 0;
 }
 
-b8 render_view_system_create(const render_view_config* config) {
-    if (!config) {
-        KERROR("render_view_system_create requires a pointer to a valid config.");
+b8 render_view_system_register(render_view* view) {
+    if (!view) {
+        KERROR("render_view_system_register requires a pointer to a valid view.");
         return false;
     }
 
-    if (!config->name || string_length(config->name) < 1) {
-        KERROR("render_view_system_create: name is required");
+    if (!view->name || string_length(view->name) < 1) {
+        KERROR("render_view_system_register: name is required");
         return false;
     }
 
-    if (config->pass_count < 1) {
-        KERROR("render_view_system_create - Config must have at least one renderpass.");
+    if (view->renderpass_count < 1) {
+        KERROR("render_view_system_register - View must have at least one renderpass.");
         return false;
     }
 
     u16 id = INVALID_ID_U16;
     // Make sure there is not already an entry with this name already registered.
-    hashtable_get(&state_ptr->lookup, config->name, &id);
+    hashtable_get(&state_ptr->lookup, view->name, &id);
     if (id != INVALID_ID_U16) {
-        KERROR("render_view_system_create - A view named '%s' already exists. A new one will not be created.", config->name);
+        KERROR("render_view_system_register - A view named '%s' already exists. A new one will not be registered.", view->name);
         return false;
     }
 
     // Find a new id.
     for (u32 i = 0; i < state_ptr->max_view_count; ++i) {
-        if (state_ptr->registered_views[i].id == INVALID_ID_U16) {
+        if (!state_ptr->registered_views[i]) {
             id = i;
             break;
         }
@@ -116,75 +108,25 @@ b8 render_view_system_create(const render_view_config* config) {
 
     // Make sure a valid entry was found.
     if (id == INVALID_ID_U16) {
-        KERROR("render_view_system_create - No available space for a new view. Change system config to account for more.");
+        KERROR("render_view_system_register - No available space for a new view. Change system config to account for more.");
         return false;
     }
-
-    render_view* view = &state_ptr->registered_views[id];
-    view->id = id;
-    view->type = config->type;
-    // TODO: Leaking the name, create a destroy method and kill this.
-    view->name = string_duplicate(config->name);
-    view->custom_shader_name = config->custom_shader_name;
-    view->renderpass_count = config->pass_count;
-    view->passes = kallocate(sizeof(renderpass) * view->renderpass_count, MEMORY_TAG_ARRAY);
-
-    // Create the renderpasses according to configuration.
-    for (u32 i = 0; i < view->renderpass_count; ++i) {
-        if (!renderer_renderpass_create(&config->passes[i], &view->passes[i])) {
-            KERROR("render_view_system_create - Failed to create renderpass '%s'", config->passes[i].name);
-            return false;
-        }
-    }
-
-    // TODO: Assign these function pointers to known functions based on the view type.
-    // TODO: Factory pattern (with register, etc. for each type)?
-    if (config->type == RENDERER_VIEW_KNOWN_TYPE_WORLD) {
-        view->on_build_packet = render_view_world_on_build_packet;      // For building the packet
-        view->on_destroy_packet = render_view_world_on_destroy_packet;  // For destroying the packet.
-        view->on_render = render_view_world_on_render;                  // For rendering the packet
-        view->on_create = render_view_world_on_create;
-        view->on_destroy = render_view_world_on_destroy;
-        view->on_resize = render_view_world_on_resize;
-        view->regenerate_attachment_target = 0;
-    } else if (config->type == RENDERER_VIEW_KNOWN_TYPE_UI) {
-        view->on_build_packet = render_view_ui_on_build_packet;      // For building the packet
-        view->on_destroy_packet = render_view_ui_on_destroy_packet;  // For destroying the packet.
-        view->on_render = render_view_ui_on_render;                  // For rendering the packet
-        view->on_create = render_view_ui_on_create;
-        view->on_destroy = render_view_ui_on_destroy;
-        view->on_resize = render_view_ui_on_resize;
-        view->regenerate_attachment_target = 0;
-    } else if (config->type == RENDERER_VIEW_KNOWN_TYPE_SKYBOX) {
-        view->on_build_packet = render_view_skybox_on_build_packet;      // For building the packet
-        view->on_destroy_packet = render_view_skybox_on_destroy_packet;  // For destroying the packet.
-        view->on_render = render_view_skybox_on_render;                  // For rendering the packet
-        view->on_create = render_view_skybox_on_create;
-        view->on_destroy = render_view_skybox_on_destroy;
-        view->on_resize = render_view_skybox_on_resize;
-        view->regenerate_attachment_target = 0;
-    } else if (config->type == RENDERER_VIEW_KNOWN_TYPE_PICK) {
-        view->on_build_packet = render_view_pick_on_build_packet;      // For building the packet
-        view->on_destroy_packet = render_view_pick_on_destroy_packet;  // For destroying the packet.
-        view->on_render = render_view_pick_on_render;                  // For rendering the packet
-        view->on_create = render_view_pick_on_create;
-        view->on_destroy = render_view_pick_on_destroy;
-        view->on_resize = render_view_pick_on_resize;
-        view->regenerate_attachment_target = render_view_pick_regenerate_attachment_target;
-    }
-
-    // Call the on create
-    if (!view->on_create(view)) {
-        KERROR("Failed to create view.");
-        kfree(view->passes, sizeof(renderpass*) * view->renderpass_count, MEMORY_TAG_ARRAY);
-        kzero_memory(&state_ptr->registered_views[id], sizeof(render_view));
-        return false;
-    }
-
-    render_view_system_regenerate_render_targets(view);
 
     // Update the hashtable entry.
-    hashtable_set(&state_ptr->lookup, config->name, &id);
+    hashtable_set(&state_ptr->lookup, view->name, &id);
+
+    // Set the array element's pointer.
+    state_ptr->registered_views[id] = view;
+
+    // Call the on register
+    if (!view->on_registered(view)) {
+        KERROR("Failed to register view '%s'.", view->name);
+        // kfree(view->passes, sizeof(renderpass*) * view->renderpass_count, MEMORY_TAG_ARRAY);
+        // kzero_memory(&state_ptr->registered_views[id], sizeof(render_view));
+        return false;
+    }
+
+    render_view_system_render_targets_regenerate(view);
 
     return true;
 }
@@ -192,8 +134,8 @@ b8 render_view_system_create(const render_view_config* config) {
 void render_view_system_on_window_resize(u32 width, u32 height) {
     // Send to all views
     for (u32 i = 0; i < state_ptr->max_view_count; ++i) {
-        if (state_ptr->registered_views[i].id != INVALID_ID_U16) {
-            state_ptr->registered_views[i].on_resize(&state_ptr->registered_views[i], width, height);
+        if (state_ptr->registered_views[i]) {
+            state_ptr->registered_views[i]->on_resize(state_ptr->registered_views[i], width, height);
         }
     }
 }
@@ -203,31 +145,31 @@ render_view* render_view_system_get(const char* name) {
         u16 id = INVALID_ID_U16;
         hashtable_get(&state_ptr->lookup, name, &id);
         if (id != INVALID_ID_U16) {
-            return &state_ptr->registered_views[id];
+            return state_ptr->registered_views[id];
         }
     }
     return 0;
 }
 
-b8 render_view_system_build_packet(const render_view* view, struct linear_allocator* frame_allocator, void* data, struct render_view_packet* out_packet) {
+b8 render_view_system_packet_build(const render_view* view, struct linear_allocator* frame_allocator, void* data, struct render_view_packet* out_packet) {
     if (view && out_packet) {
-        return view->on_build_packet(view, frame_allocator, data, out_packet);
+        return view->on_packet_build(view, frame_allocator, data, out_packet);
     }
 
-    KERROR("render_view_system_build_packet requires valid pointers to a view and a packet.");
+    KERROR("render_view_system_packet_build requires valid pointers to a view and a packet.");
     return false;
 }
 
-b8 render_view_system_on_render(const render_view* view, const render_view_packet* packet, u64 frame_number, u64 render_target_index) {
+b8 render_view_system_on_render(const render_view* view, const render_view_packet* packet, u64 frame_number, u64 render_target_index, const struct frame_data* p_frame_data) {
     if (view && packet) {
-        return view->on_render(view, packet, frame_number, render_target_index);
+        return view->on_render(view, packet, frame_number, render_target_index, p_frame_data);
     }
 
     KERROR("render_view_system_on_render requires a valid pointer to a data.");
     return false;
 }
 
-void render_view_system_regenerate_render_targets(render_view* view) {
+void render_view_system_render_targets_regenerate(render_view* view) {
     // Create render targets for each. TODO: Should be configurable.
 
     for (u64 r = 0; r < view->renderpass_count; ++r) {
@@ -251,11 +193,11 @@ void render_view_system_regenerate_render_targets(render_view* view) {
                         continue;
                     }
                 } else if (attachment->source == RENDER_TARGET_ATTACHMENT_SOURCE_VIEW) {
-                    if (!view->regenerate_attachment_target) {
+                    if (!view->attachment_target_regenerate) {
                         KFATAL("RENDER_TARGET_ATTACHMENT_SOURCE_VIEW configured for an attachment whose view does not support this operation.");
                         continue;
                     } else {
-                        if (!view->regenerate_attachment_target(view, r, attachment)) {
+                        if (!view->attachment_target_regenerate(view, r, attachment)) {
                             KERROR("View failed to regenerate attachment target for attachment type: 0x%x", attachment->type);
                         }
                     }

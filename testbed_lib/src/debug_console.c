@@ -1,4 +1,5 @@
 #include "debug_console.h"
+#include "resources/ui_text.h"
 
 #include <core/console.h>
 #include <core/kmemory.h>
@@ -11,6 +12,18 @@
 b8 debug_console_consumer_write(void* inst, log_level level, const char* message) {
     debug_console_state* state = (debug_console_state*)inst;
     if (state) {
+        // Not necessarily a failure, but move on if not loaded.
+        if (!state->loaded) {
+            return true;
+        }
+        // For high-priority error/fatal messages, don't bother with splitting,
+        // just output them because something truly terrible could prevent this
+        // split from happening.
+        if (level <= LOG_LEVEL_ERROR) {
+            darray_push(state->lines, message);
+            state->dirty = true;
+            return true;
+        }
         // Create a new copy of the string, and try splitting it
         // by newlines to make each one count as a new line.
         // NOTE: The lack of cleanup on the strings is intentional
@@ -34,6 +47,10 @@ b8 debug_console_consumer_write(void* inst, log_level level, const char* message
 
 static b8 debug_console_on_key(u16 code, void* sender, void* listener_inst, event_context context) {
     debug_console_state* state = (debug_console_state*)listener_inst;
+    // Not necessarily a failure, but move on if not loaded.
+    if (!state->loaded) {
+        return false;
+    }
     if (!state->visible) {
         return false;
     }
@@ -50,18 +67,18 @@ static b8 debug_console_on_key(u16 code, void* sender, void* listener_inst, even
                 darray_push(state->history, entry);
 
                 // Execute the command and clear the text.
-                if (!console_execute_command(state->entry_control.text)) {
+                if (!console_command_execute(state->entry_control.text)) {
                     // TODO: handle error?
                 }
                 // Clear the text.
-                ui_text_set_text(&state->entry_control, "");
+                ui_text_text_set(&state->entry_control, "");
             }
         } else if (key_code == KEY_BACKSPACE) {
             u32 len = string_length(state->entry_control.text);
             if (len > 0) {
                 char* str = string_duplicate(state->entry_control.text);
                 str[len - 1] = 0;
-                ui_text_set_text(&state->entry_control, str);
+                ui_text_text_set(&state->entry_control, str);
                 kfree(str, len + 1, MEMORY_TAG_STRING);
             }
         } else {
@@ -131,7 +148,7 @@ static b8 debug_console_on_key(u16 code, void* sender, void* listener_inst, even
                 u32 len = string_length(state->entry_control.text);
                 char* new_text = kallocate(len + 2, MEMORY_TAG_STRING);
                 string_format(new_text, "%s%c", state->entry_control.text, char_code);
-                ui_text_set_text(&state->entry_control, new_text);
+                ui_text_text_set(&state->entry_control, new_text);
                 kfree(new_text, len + 1, MEMORY_TAG_STRING);
             }
         }
@@ -150,6 +167,7 @@ void debug_console_create(debug_console_state* out_console_state) {
         out_console_state->visible = false;
         out_console_state->history = darray_create(command_history_entry);
         out_console_state->history_offset = 0;
+        out_console_state->loaded = false;
 
         // NOTE: update the text based on number of lines to display and
         // the number of lines offset from the bottom. A UI Text object is
@@ -158,7 +176,7 @@ void debug_console_create(debug_console_state* out_console_state) {
         // NOTE: also should consider clipping rectangles and newlines.
 
         // Register as a console consumer.
-        console_register_consumer(out_console_state, debug_console_consumer_write, &out_console_state->console_consumer_id);
+        console_consumer_register(out_console_state, debug_console_consumer_write, &out_console_state->console_consumer_id);
 
         // Register for key events.
         event_register(EVENT_CODE_KEY_PRESSED, out_console_state, debug_console_on_key);
@@ -173,33 +191,36 @@ b8 debug_console_load(debug_console_state* state) {
     }
 
     // Create a ui text control for rendering.
-    if (!ui_text_create(UI_TEXT_TYPE_SYSTEM, "Noto Sans CJK JP", 31, "", &state->text_control)) {
+    if (!ui_text_create("debug_console_log_text", UI_TEXT_TYPE_SYSTEM, "Noto Sans CJK JP", 31, "", &state->text_control)) {
         KFATAL("Unable to create text control for debug console.");
         return false;
     }
 
-    ui_text_set_position(&state->text_control, (vec3){3.0f, 30.0f, 0.0f});
+    ui_text_position_set(&state->text_control, (vec3){3.0f, 30.0f, 0.0f});
 
     // Create another ui text control for rendering typed text.
-    if (!ui_text_create(UI_TEXT_TYPE_SYSTEM, "Noto Sans CJK JP", 31, "", &state->entry_control)) {
+    if (!ui_text_create("debug_console_entry_text", UI_TEXT_TYPE_SYSTEM, "Noto Sans CJK JP", 31, "", &state->entry_control)) {
         KFATAL("Unable to create entry text control for debug console.");
         return false;
     }
 
-    ui_text_set_position(&state->entry_control, (vec3){3.0f, 30.0f + (31.0f * state->line_display_count), 0.0f});
+    ui_text_position_set(&state->entry_control, (vec3){3.0f, 30.0f + (31.0f * state->line_display_count), 0.0f});
+
+    state->loaded = true;
 
     return true;
 }
 
 void debug_console_unload(debug_console_state* state) {
     if (state) {
+        state->loaded = false;
         ui_text_destroy(&state->text_control);
         ui_text_destroy(&state->entry_control);
     }
 }
 
 void debug_console_update(debug_console_state* state) {
-    if (state && state->dirty) {
+    if (state && state->loaded && state->dirty) {
         u32 line_count = darray_length(state->lines);
         u32 max_lines = KMIN(state->line_display_count, KMAX(line_count, state->line_display_count));
 
@@ -228,7 +249,7 @@ void debug_console_update(debug_console_state* state) {
         buffer[buffer_pos] = '\0';
 
         // Once the string is built, set the text.
-        ui_text_set_text(&state->text_control, buffer);
+        ui_text_text_set(&state->text_control, buffer);
 
         state->dirty = false;
     }
@@ -238,14 +259,14 @@ void debug_console_on_lib_load(debug_console_state* state, b8 update_consumer) {
     if (update_consumer) {
         event_register(EVENT_CODE_KEY_PRESSED, state, debug_console_on_key);
         event_register(EVENT_CODE_KEY_RELEASED, state, debug_console_on_key);
-        console_update_consumer(state->console_consumer_id, state, debug_console_consumer_write);
+        console_consumer_update(state->console_consumer_id, state, debug_console_consumer_write);
     }
 }
 
 void debug_console_on_lib_unload(debug_console_state* state) {
     event_unregister(EVENT_CODE_KEY_PRESSED, state, debug_console_on_key);
     event_unregister(EVENT_CODE_KEY_RELEASED, state, debug_console_on_key);
-    console_update_consumer(state->console_consumer_id, 0, 0);
+    console_consumer_update(state->console_consumer_id, 0, 0);
 }
 
 ui_text* debug_console_get_text(debug_console_state* state) {
@@ -292,7 +313,7 @@ void debug_console_move_up(debug_console_state* state) {
 
 void debug_console_move_down(debug_console_state* state) {
     if (state) {
-        if(state->line_offset == 0) {
+        if (state->line_offset == 0) {
             return;
         }
         state->dirty = true;
@@ -334,7 +355,7 @@ void debug_console_history_back(debug_console_state* state) {
         u32 length = darray_length(state->history);
         if (length > 0) {
             state->history_offset = KMIN(state->history_offset++, length - 1);
-            ui_text_set_text(&state->entry_control, state->history[length - state->history_offset - 1].command);
+            ui_text_text_set(&state->entry_control, state->history[length - state->history_offset - 1].command);
         }
     }
 }
@@ -344,7 +365,7 @@ void debug_console_history_forward(debug_console_state* state) {
         u32 length = darray_length(state->history);
         if (length > 0) {
             state->history_offset = KMAX(state->history_offset--, 0);
-            ui_text_set_text(&state->entry_control, state->history[length - state->history_offset - 1].command);
+            ui_text_text_set(&state->entry_control, state->history[length - state->history_offset - 1].command);
         }
     }
 }

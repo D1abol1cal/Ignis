@@ -1,20 +1,19 @@
 #include "ui_text.h"
 
-#include "core/logger.h"
+#include "core/identifier.h"
 #include "core/kmemory.h"
 #include "core/kstring.h"
-#include "core/identifier.h"
+#include "core/logger.h"
 #include "math/kmath.h"
 #include "math/transform.h"
-#include "renderer/renderer_types.inl"
 #include "renderer/renderer_frontend.h"
-
+#include "renderer/renderer_types.inl"
 #include "systems/font_system.h"
 #include "systems/shader_system.h"
 
-void regenerate_geometry(ui_text* text);
+static void regenerate_geometry(ui_text* text);
 
-b8 ui_text_create(ui_text_type type, const char* font_name, u16 font_size, const char* text_content, ui_text* out_text) {
+b8 ui_text_create(const char* name, ui_text_type type, const char* font_name, u16 font_size, const char* text_content, ui_text* out_text) {
     if (!font_name || !text_content || !out_text) {
         KERROR("ui_text_create requires a valid pointer to font_name, text_content and out_text");
         return false;
@@ -32,6 +31,7 @@ b8 ui_text_create(ui_text_type type, const char* font_name, u16 font_size, const
         return false;
     }
 
+    out_text->name = string_duplicate(name);
     out_text->text = string_duplicate(text_content);
     out_text->transform = transform_create();
 
@@ -49,13 +49,15 @@ b8 ui_text_create(ui_text_type type, const char* font_name, u16 font_size, const
     // Acquire resources for font texture map.
     shader* ui_shader = shader_system_get("Shader.Builtin.UI");  // TODO: text shader.
     texture_map* font_maps[1] = {&out_text->data->atlas};
-    if (!renderer_shader_acquire_instance_resources(ui_shader, font_maps, &out_text->instance_id)) {
+    if (!renderer_shader_instance_resources_acquire(ui_shader, 1, font_maps, &out_text->instance_id)) {
         KFATAL("Unable to acquire shader resources for font texture map.");
         return false;
     }
 
     // Generate the vertex buffer.
-    if (!renderer_renderbuffer_create(RENDERBUFFER_TYPE_VERTEX, text_length * quad_size, false, &out_text->vertex_buffer)) {
+    char bufname[256] = {0};
+    string_format(bufname, "renderbuffer_vertexbuffer_uitext_%s", out_text->name);
+    if (!renderer_renderbuffer_create(bufname, RENDERBUFFER_TYPE_VERTEX, text_length * quad_size, false, &out_text->vertex_buffer)) {
         KERROR("ui_text_create failed to create vertex renderbuffer.");
         return false;
     }
@@ -65,8 +67,10 @@ b8 ui_text_create(ui_text_type type, const char* font_name, u16 font_size, const
     }
 
     // Generate an index buffer.
+    kzero_memory(bufname, 256);
+    string_format(bufname, "renderbuffer_indexbuffer_uitext_%s", out_text->name);
     static const u8 quad_index_size = sizeof(u32) * 6;
-    if (!renderer_renderbuffer_create(RENDERBUFFER_TYPE_INDEX, text_length * quad_index_size, false, &out_text->index_buffer)) {
+    if (!renderer_renderbuffer_create(bufname, RENDERBUFFER_TYPE_INDEX, text_length * quad_index_size, false, &out_text->index_buffer)) {
         KERROR("ui_text_create failed to create index renderbuffer.");
         return false;
     }
@@ -95,6 +99,12 @@ void ui_text_destroy(ui_text* text) {
         // Release the unique identifier.
         identifier_release_id(text->unique_id);
 
+        if(text->name) {
+            u32 text_length = string_length(text->name);
+            kfree(text->name, sizeof(char) * text_length + 1, MEMORY_TAG_STRING);
+            text->name = 0;
+        }
+
         if (text->text) {
             u32 text_length = string_length(text->text);
             kfree(text->text, sizeof(char) * text_length + 1, MEMORY_TAG_STRING);
@@ -107,18 +117,18 @@ void ui_text_destroy(ui_text* text) {
 
         // Release resources for font texture map.
         shader* ui_shader = shader_system_get("Shader.Builtin.UI");  // TODO: text shader.
-        if (!renderer_shader_release_instance_resources(ui_shader, text->instance_id)) {
+        if (!renderer_shader_instance_resources_release(ui_shader, text->instance_id)) {
             KFATAL("Unable to release shader resources for font texture map.");
         }
     }
     kzero_memory(text, sizeof(ui_text));
 }
 
-void ui_text_set_position(ui_text* u_text, vec3 position) {
-    transform_set_position(&u_text->transform, position);
+void ui_text_position_set(ui_text* u_text, vec3 position) {
+    transform_position_set(&u_text->transform, position);
 }
 
-void ui_text_set_text(ui_text* u_text, const char* text) {
+void ui_text_text_set(ui_text* u_text, const char* text) {
     if (u_text && u_text->text) {
         // If strings are already equal, don't do anything.
         if (strings_equal(text, u_text->text)) {
@@ -154,7 +164,7 @@ void ui_text_draw(ui_text* u_text) {
     }
 }
 
-void regenerate_geometry(ui_text* text) {
+static void regenerate_geometry(ui_text* text) {
     // Get the UTF-8 string length
     u32 text_length_utf8 = string_utf8_length(text->text);
     // Also get the length in characters.

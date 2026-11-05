@@ -30,6 +30,8 @@ typedef struct directional_light {
     char* name;
     /** @brief The directional light shader data. */
     directional_light_data data;
+    /** @brief Debug data assigned to the light. */
+    void* debug_data;
 } directional_light;
 
 typedef struct point_light_data {
@@ -56,6 +58,8 @@ typedef struct point_light {
     char* name;
     /** @brief The shader data for the point light. */
     point_light_data data;
+    /** @brief Debug data assigned to the light. */
+    void* debug_data;
 } point_light;
 
 /**
@@ -84,7 +88,7 @@ void light_system_shutdown(void* state);
  * @param light A pointer to the light to be added.
  * @return True on success; otherwise false.
  */
-KAPI b8 light_system_add_directional(directional_light* light);
+KAPI b8 light_system_directional_add(directional_light* light);
 
 /**
  * @brief Attempts to add a point light to the system.
@@ -92,7 +96,7 @@ KAPI b8 light_system_add_directional(directional_light* light);
  * @param light A pointer to the light to be added.
  * @return True on success; otherwise false.
  */
-KAPI b8 light_system_add_point(point_light* light);
+KAPI b8 light_system_point_add(point_light* light);
 
 /**
  * @brief Attempts to remove the given light from the system. A pointer comparison
@@ -101,7 +105,7 @@ KAPI b8 light_system_add_point(point_light* light);
  * @param light A pointer to the light to be removed.
  * @return True on successful removal; otherwise false.
  */
-KAPI b8 light_system_remove_directional(directional_light* light);
+KAPI b8 light_system_directional_remove(directional_light* light);
 
 /**
  * @brief Attempts to remove the given light from the system. A pointer comparison
@@ -110,7 +114,7 @@ KAPI b8 light_system_remove_directional(directional_light* light);
  * @param light A pointer to the light to be removed.
  * @return True on successful removal; otherwise false.
  */
-KAPI b8 light_system_remove_point(point_light* light);
+KAPI b8 light_system_point_remove(point_light* light);
 
 /**
  * @brief Obtains a pointer to the current directional light. Can be NULL if one

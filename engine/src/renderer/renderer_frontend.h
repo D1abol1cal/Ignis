@@ -150,9 +150,9 @@ KAPI void renderer_texture_read_data(texture* t, u32 offset, u32 size, void** ou
 KAPI void renderer_texture_read_pixel(texture* t, u32 x, u32 y, u8** out_rgba);
 
 /**
- * @brief Acquiores GPU resources and uploads geometry data.
+ * @brief Creates geometry, taking a copy of the provided data and setting up the data structure.
  *
- * @param geometry A pointer to the geometry to acquire resources for.
+ * @param geometry A pointer to the geometry to create.
  * @param vertex_size The size of each vertex.
  * @param vertex_count The number of vertices.
  * @param vertices The vertex array.
@@ -161,21 +161,39 @@ KAPI void renderer_texture_read_pixel(texture* t, u32 x, u32 y, u8** out_rgba);
  * @param indices The index array.
  * @return True on success; otherwise false.
  */
-KAPI b8 renderer_create_geometry(geometry* geometry, u32 vertex_size, u32 vertex_count, const void* vertices, u32 index_size, u32 index_count, const void* indices);
+KAPI b8 renderer_geometry_create(geometry* geometry, u32 vertex_size, u32 vertex_count, const void* vertices, u32 index_size, u32 index_count, const void* indices);
+
+/**
+ * @brief Acquires GPU resources and uploads geometry data.
+ *
+ * @param geometry A pointer to the geometry to upload.
+ * @return True on success; otherwise false.
+ */
+KAPI b8 renderer_geometry_upload(geometry* geometry);
+
+/**
+ * @brief Updates vertex data in the given geometry with the provided data in the given range.
+ *
+ * @param g A pointer to the geometry to be created.
+ * @param offset The offset in bytes to update. 0 if updating from the beginning.
+ * @param vertex_count The number of vertices which will be updated.
+ * @param vertices The vertex data.
+ */
+KAPI void renderer_geometry_vertex_update(geometry* g, u32 offset, u32 vertex_count, void* vertices);
 
 /**
  * @brief Destroys the given geometry, releasing GPU resources.
  *
  * @param geometry A pointer to the geometry to be destroyed.
  */
-KAPI void renderer_destroy_geometry(geometry* geometry);
+KAPI void renderer_geometry_destroy(geometry* geometry);
 
 /**
  * @brief Draws the given geometry. Should only be called inside a renderpass, within a frame.
  *
  * @param data The render data of the geometry to be drawn.
  */
-KAPI void renderer_draw_geometry(geometry_render_data* data);
+KAPI void renderer_geometry_draw(geometry_render_data* data);
 
 /**
  * @brief Begins the given renderpass.
@@ -252,9 +270,10 @@ KAPI b8 renderer_shader_bind_instance(struct shader* s, u32 instance_id);
  * @brief Applies global data to the uniform buffer.
  *
  * @param s A pointer to the shader to apply the global data for.
+ * @param needs_update Indicates if the shader uniforms need to be updated or just bound.
  * @return True on success; otherwise false.
  */
-KAPI b8 renderer_shader_apply_globals(struct shader* s);
+KAPI b8 renderer_shader_apply_globals(struct shader* s, b8 needs_update);
 
 /**
  * @brief Applies data for the currently bound instance.
@@ -269,11 +288,12 @@ KAPI b8 renderer_shader_apply_instance(struct shader* s, b8 needs_update);
  * @brief Acquires internal instance-level resources and provides an instance id.
  *
  * @param s A pointer to the shader to acquire resources from.
+ * @param texture_map_count The number of texture maps used.
  * @param maps An array of texture map pointers. Must be one per texture in the instance.
  * @param out_instance_id A pointer to hold the new instance identifier.
  * @return True on success; otherwise false.
  */
-KAPI b8 renderer_shader_acquire_instance_resources(struct shader* s, texture_map** maps, u32* out_instance_id);
+KAPI b8 renderer_shader_instance_resources_acquire(struct shader* s, u32 texture_map_count, texture_map** maps, u32* out_instance_id);
 
 /**
  * @brief Releases internal instance-level resources for the given instance id.
@@ -282,7 +302,7 @@ KAPI b8 renderer_shader_acquire_instance_resources(struct shader* s, texture_map
  * @param instance_id The instance identifier whose resources are to be released.
  * @return True on success; otherwise false.
  */
-KAPI b8 renderer_shader_release_instance_resources(struct shader* s, u32 instance_id);
+KAPI b8 renderer_shader_instance_resources_release(struct shader* s, u32 instance_id);
 
 /**
  * @brief Sets the uniform of the given shader to the provided value.
@@ -292,7 +312,7 @@ KAPI b8 renderer_shader_release_instance_resources(struct shader* s, u32 instanc
  * @param value A pointer to the value to be set.
  * @return b8 True on success; otherwise false.
  */
-KAPI b8 renderer_set_uniform(struct shader* s, struct shader_uniform* uniform, const void* value);
+KAPI b8 renderer_shader_uniform_set(struct shader* s, struct shader_uniform* uniform, const void* value);
 
 /**
  * @brief Acquires internal resources for the given texture map.
@@ -300,14 +320,14 @@ KAPI b8 renderer_set_uniform(struct shader* s, struct shader_uniform* uniform, c
  * @param map A pointer to the texture map to obtain resources for.
  * @return True on success; otherwise false.
  */
-KAPI b8 renderer_texture_map_acquire_resources(struct texture_map* map);
+KAPI b8 renderer_texture_map_resources_acquire(struct texture_map* map);
 
 /**
  * @brief Releases internal resources for the given texture map.
  *
  * @param map A pointer to the texture map to release resources from.
  */
-KAPI void renderer_texture_map_release_resources(struct texture_map* map);
+KAPI void renderer_texture_map_resources_release(struct texture_map* map);
 
 /**
  * @brief Creates a new render target using the provided data.
@@ -382,7 +402,7 @@ KAPI b8 renderer_is_multithreaded(void);
  * @param flag The flag to be checked.
  * @return True if the flag(s) set; otherwise false.
  */
-KAPI b8 renderer_flag_enabled(renderer_config_flags flag);
+KAPI b8 renderer_flag_enabled_get(renderer_config_flags flag);
 /**
  * @brief Sets whether the included flag(s) are enabled or not. If multiple flags
  * are passed, multiple are set at once.
@@ -390,19 +410,20 @@ KAPI b8 renderer_flag_enabled(renderer_config_flags flag);
  * @param flag The flag to be checked.
  * @param enabled Indicates whether or not to enable the flag(s).
  */
-KAPI void renderer_flag_set_enabled(renderer_config_flags flag, b8 enabled);
+KAPI void renderer_flag_enabled_set(renderer_config_flags flag, b8 enabled);
 
 /**
  * @brief Creates a new renderbuffer to hold data for a given purpose/use. Backed by a
  * renderer-backend-specific buffer resource.
  *
+ * @param name The name of the renderbuffer, used for debugging purposes.
  * @param type The type of buffer, indicating it's use (i.e. vertex/index data, uniforms, etc.)
  * @param total_size The total size in bytes of the buffer.
  * @param use_freelist Indicates if the buffer should use a freelist to track allocations.
  * @param out_buffer A pointer to hold the newly created buffer.
  * @return True on success; otherwise false.
  */
-KAPI b8 renderer_renderbuffer_create(renderbuffer_type type, u64 total_size, b8 use_freelist, renderbuffer* out_buffer);
+KAPI b8 renderer_renderbuffer_create(const char* name, renderbuffer_type type, u64 total_size, b8 use_freelist, renderbuffer* out_buffer);
 
 /**
  * @brief Destroys the given renderbuffer.

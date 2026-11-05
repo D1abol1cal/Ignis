@@ -1,12 +1,11 @@
 #include "geometry_system.h"
 
-#include "core/logger.h"
 #include "core/kmemory.h"
 #include "core/kstring.h"
+#include "core/logger.h"
 #include "math/geometry_utils.h"
-#include "systems/material_system.h"
 #include "renderer/renderer_frontend.h"
-#include "math/geometry_utils.h"
+#include "systems/material_system.h"
 
 typedef struct geometry_reference {
     u64 reference_count;
@@ -26,9 +25,9 @@ typedef struct geometry_system_state {
 
 static geometry_system_state* state_ptr = 0;
 
-b8 create_default_geometries(geometry_system_state* state);
-b8 create_geometry(geometry_system_state* state, geometry_config config, geometry* g);
-void destroy_geometry(geometry_system_state* state, geometry* g);
+static b8 create_default_geometries(geometry_system_state* state);
+static b8 create_geometry(geometry_system_state* state, geometry_config config, geometry* g);
+static void destroy_geometry(geometry_system_state* state, geometry* g);
 
 b8 geometry_system_initialize(u64* memory_requirement, void* state, void* config) {
     geometry_system_config* typed_config = (geometry_system_config*)config;
@@ -166,16 +165,31 @@ geometry* geometry_system_get_default_2d(void) {
     return 0;
 }
 
-b8 create_geometry(geometry_system_state* state, geometry_config config, geometry* g) {
-    // Send the geometry off to the renderer to be uploaded to the GPU.
-    if (!renderer_create_geometry(g, config.vertex_size, config.vertex_count, config.vertices, config.index_size, config.index_count, config.indices)) {
+static b8 create_geometry(geometry_system_state* state, geometry_config config, geometry* g) {
+    if (!g) {
+        KERROR("geometry_system->create_geometry requires a valid pointer to geometry.");
+        return false;
+    }
+    // Create the geometry.
+    if (!renderer_geometry_create(g, config.vertex_size, config.vertex_count, config.vertices, config.index_size, config.index_count, config.indices)) {
+        KERROR("Geometry creation failed during renderer_geometry_create.");
         // Invalidate the entry.
         state->registered_geometries[g->id].reference_count = 0;
         state->registered_geometries[g->id].auto_release = false;
         g->id = INVALID_ID;
         g->generation = INVALID_ID_U16;
         g->internal_id = INVALID_ID;
-
+        return false;
+    }
+    // Send the geometry off to the renderer to be uploaded to the GPU.
+    if (!renderer_geometry_upload(g)) {
+        KERROR("Geometry creation failed during renderer_geometry_upload.");
+        // Invalidate the entry.
+        state->registered_geometries[g->id].reference_count = 0;
+        state->registered_geometries[g->id].auto_release = false;
+        g->id = INVALID_ID;
+        g->generation = INVALID_ID_U16;
+        g->internal_id = INVALID_ID;
         return false;
     }
 
@@ -196,8 +210,8 @@ b8 create_geometry(geometry_system_state* state, geometry_config config, geometr
     return true;
 }
 
-void destroy_geometry(geometry_system_state* state, geometry* g) {
-    renderer_destroy_geometry(g);
+static void destroy_geometry(geometry_system_state* state, geometry* g) {
+    renderer_geometry_destroy(g);
     g->internal_id = INVALID_ID;
     g->generation = INVALID_ID_U16;
     g->id = INVALID_ID;
@@ -211,7 +225,7 @@ void destroy_geometry(geometry_system_state* state, geometry* g) {
     }
 }
 
-b8 create_default_geometries(geometry_system_state* state) {
+static b8 create_default_geometries(geometry_system_state* state) {
     vertex_3d verts[4];
     kzero_memory(verts, sizeof(vertex_3d) * 4);
 
@@ -240,9 +254,12 @@ b8 create_default_geometries(geometry_system_state* state) {
     u32 indices[6] = {0, 1, 2, 0, 3, 1};
 
     // Send the geometry off to the renderer to be uploaded to the GPU.
-    state->default_geometry.internal_id = INVALID_ID;
-    if (!renderer_create_geometry(&state->default_geometry, sizeof(vertex_3d), 4, verts, sizeof(u32), 6, indices)) {
+    if(!renderer_geometry_create(&state->default_geometry, sizeof(vertex_3d), 4, verts, sizeof(u32), 6, indices)) {
         KFATAL("Failed to create default geometry. Application cannot continue.");
+        return false;
+    }
+    if (!renderer_geometry_upload(&state->default_geometry)) {
+        KFATAL("Failed to upload default geometry. Application cannot continue.");
         return false;
     }
 
@@ -276,13 +293,17 @@ b8 create_default_geometries(geometry_system_state* state) {
     u32 indices2d[6] = {2, 1, 0, 3, 0, 1};
 
     // Send the geometry off to the renderer to be uploaded to the GPU.
-    if (!renderer_create_geometry(&state->default_2d_geometry, sizeof(vertex_2d), 4, verts2d, sizeof(u32), 6, indices2d)) {
+    if (!renderer_geometry_create(&state->default_2d_geometry, sizeof(vertex_2d), 4, verts2d, sizeof(u32), 6, indices2d)) {
         KFATAL("Failed to create default 2d geometry. Application cannot continue.");
+        return false;
+    }
+    if (!renderer_geometry_upload(&state->default_2d_geometry)) {
+        KFATAL("Failed to upload default 2d geometry. Application cannot continue.");
         return false;
     }
 
     // Acquire the default material.
-    state->default_2d_geometry.material = material_system_get_default();
+    state->default_2d_geometry.material = material_system_get_default_ui();
 
     return true;
 }

@@ -1,23 +1,22 @@
 #include "renderer_frontend.h"
 
-#include "core/logger.h"
-#include "core/kmemory.h"
-#include "core/kvar.h"
-#include "core/frame_data.h"
-#include "core/kstring.h"
 #include "containers/freelist.h"
+#include "core/frame_data.h"
+#include "core/kmemory.h"
+#include "core/kstring.h"
+#include "core/kvar.h"
+#include "core/logger.h"
+#include "core/systems_manager.h"
 #include "math/kmath.h"
 #include "platform/platform.h"
-
+#include "renderer/renderer_types.inl"
 #include "resources/resource_types.h"
-#include "systems/resource_system.h"
-#include "systems/texture_system.h"
-#include "systems/material_system.h"
-#include "systems/shader_system.h"
 #include "systems/camera_system.h"
+#include "systems/material_system.h"
 #include "systems/render_view_system.h"
-
-#include "core/systems_manager.h"
+#include "systems/resource_system.h"
+#include "systems/shader_system.h"
+#include "systems/texture_system.h"
 
 typedef struct renderer_system_state {
     renderer_plugin plugin;
@@ -60,7 +59,7 @@ b8 renderer_system_initialize(u64* memory_requirement, void* state, void* config
     renderer_config.flags = RENDERER_CONFIG_FLAG_VSYNC_ENABLED_BIT | RENDERER_CONFIG_FLAG_POWER_SAVING_BIT;
 
     // Create the vsync kvar
-    kvar_create_int("vsync", (renderer_config.flags & RENDERER_CONFIG_FLAG_VSYNC_ENABLED_BIT) ? 1 : 0);
+    kvar_int_create("vsync", (renderer_config.flags & RENDERER_CONFIG_FLAG_VSYNC_ENABLED_BIT) ? 1 : 0);
 
     // Initialize the backend.
     if (!state_ptr->plugin.initialize(&state_ptr->plugin, &renderer_config, &state_ptr->window_render_target_count)) {
@@ -122,19 +121,19 @@ b8 renderer_draw_frame(render_packet* packet, const struct frame_data* p_frame_d
     }
 
     // If the begin frame returned successfully, mid-frame operations may continue.
-    if (state_ptr->plugin.begin_frame(&state_ptr->plugin, p_frame_data)) {
+    if (state_ptr->plugin.frame_begin(&state_ptr->plugin, p_frame_data)) {
         u8 attachment_index = state_ptr->plugin.window_attachment_index_get(&state_ptr->plugin);
 
         // Render each view.
         for (u32 i = 0; i < packet->view_count; ++i) {
-            if (!render_view_system_on_render(packet->views[i].view, &packet->views[i], state_ptr->plugin.frame_number, attachment_index)) {
+            if (!render_view_system_on_render(packet->views[i].view, &packet->views[i], state_ptr->plugin.frame_number, attachment_index, p_frame_data)) {
                 KERROR("Error rendering view index %i.", i);
                 return false;
             }
         }
 
         // End the frame. If this fails, it is likely unrecoverable.
-        b8 result = state_ptr->plugin.end_frame(&state_ptr->plugin, p_frame_data);
+        b8 result = state_ptr->plugin.frame_end(&state_ptr->plugin, p_frame_data);
 
         if (!result) {
             KERROR("renderer_end_frame failed. Application shutting down...");
@@ -200,19 +199,64 @@ void renderer_texture_resize(texture* t, u32 new_width, u32 new_height) {
     state_ptr->plugin.texture_resize(&state_ptr->plugin, t, new_width, new_height);
 }
 
-b8 renderer_create_geometry(geometry* geometry, u32 vertex_size, u32 vertex_count, const void* vertices, u32 index_size, u32 index_count, const void* indices) {
+b8 renderer_geometry_create(geometry* g, u32 vertex_size, u32 vertex_count, const void* vertices, u32 index_size, u32 index_count, const void* indices) {
+    if (!g) {
+        KERROR("renderer_geometry_create requires a valid pointer to geometry.");
+        return false;
+    }
+    if (!vertex_count || !vertices) {
+        KERROR("renderer_geometry_create requires vertex data, and none was supplied. vertex_count=%d, vertices=%p", vertex_count, vertices);
+        return false;
+    }
+
+    g->material = 0;
+
+    // Invalidate IDs. NOTE: Don't invalidate g->id! It should have a valid id at this point,
+    // and invalidating it wreaks havoc.
+    g->internal_id = INVALID_ID;
+    g->generation = INVALID_ID_U16;
+
+    // Take a copy of the vertex data.
+    g->vertex_count = vertex_count;
+    g->vertex_element_size = vertex_size;
+    g->vertices = kallocate(vertex_size * vertex_count, MEMORY_TAG_RENDERER);
+    kcopy_memory(g->vertices, vertices, vertex_size * vertex_count);
+
+    g->index_count = index_count;
+    g->index_element_size = index_size;
+    g->indices = 0;
+    // If supplied, take a copy of the index data.
+    if (index_size && index_count) {
+        g->indices = kallocate(index_size * index_count, MEMORY_TAG_RENDERER);
+        kcopy_memory(g->indices, indices, index_size * index_count);
+    }
+
     renderer_system_state* state_ptr = (renderer_system_state*)systems_manager_get_state(K_SYSTEM_TYPE_RENDERER);
-    return state_ptr->plugin.create_geometry(&state_ptr->plugin, geometry, vertex_size, vertex_count, vertices, index_size, index_count, indices);
+    return state_ptr->plugin.geometry_create(&state_ptr->plugin, g);
 }
 
-void renderer_destroy_geometry(geometry* geometry) {
+b8 renderer_geometry_upload(geometry* g) {
+    if (!g) {
+        KERROR("renderer_geometry_upload requires a valid pointer to geometry.");
+        return false;
+    }
     renderer_system_state* state_ptr = (renderer_system_state*)systems_manager_get_state(K_SYSTEM_TYPE_RENDERER);
-    state_ptr->plugin.destroy_geometry(&state_ptr->plugin, geometry);
+    return state_ptr->plugin.geometry_upload(&state_ptr->plugin, g, 0, g->vertex_element_size * g->vertex_count, 0, g->index_element_size * g->index_count);
 }
 
-void renderer_draw_geometry(geometry_render_data* data) {
+void renderer_geometry_vertex_update(geometry* g, u32 offset, u32 vertex_count, void* vertices) {
     renderer_system_state* state_ptr = (renderer_system_state*)systems_manager_get_state(K_SYSTEM_TYPE_RENDERER);
-    state_ptr->plugin.draw_geometry(&state_ptr->plugin, data);
+    state_ptr->plugin.geometry_vertex_update(&state_ptr->plugin, g, offset, vertex_count, vertices);
+}
+
+void renderer_geometry_destroy(geometry* geometry) {
+    renderer_system_state* state_ptr = (renderer_system_state*)systems_manager_get_state(K_SYSTEM_TYPE_RENDERER);
+    state_ptr->plugin.geometry_destroy(&state_ptr->plugin, geometry);
+}
+
+void renderer_geometry_draw(geometry_render_data* data) {
+    renderer_system_state* state_ptr = (renderer_system_state*)systems_manager_get_state(K_SYSTEM_TYPE_RENDERER);
+    state_ptr->plugin.geometry_draw(&state_ptr->plugin, data);
 }
 
 b8 renderer_renderpass_begin(renderpass* pass, render_target* target) {
@@ -255,9 +299,9 @@ b8 renderer_shader_bind_instance(shader* s, u32 instance_id) {
     return state_ptr->plugin.shader_bind_instance(&state_ptr->plugin, s, instance_id);
 }
 
-b8 renderer_shader_apply_globals(shader* s) {
+b8 renderer_shader_apply_globals(shader* s, b8 needs_update) {
     renderer_system_state* state_ptr = (renderer_system_state*)systems_manager_get_state(K_SYSTEM_TYPE_RENDERER);
-    return state_ptr->plugin.shader_apply_globals(&state_ptr->plugin, s);
+    return state_ptr->plugin.shader_apply_globals(&state_ptr->plugin, s, needs_update);
 }
 
 b8 renderer_shader_apply_instance(shader* s, b8 needs_update) {
@@ -265,29 +309,29 @@ b8 renderer_shader_apply_instance(shader* s, b8 needs_update) {
     return state_ptr->plugin.shader_apply_instance(&state_ptr->plugin, s, needs_update);
 }
 
-b8 renderer_shader_acquire_instance_resources(shader* s, texture_map** maps, u32* out_instance_id) {
+b8 renderer_shader_instance_resources_acquire(shader* s, u32 texture_map_count, texture_map** maps, u32* out_instance_id) {
     renderer_system_state* state_ptr = (renderer_system_state*)systems_manager_get_state(K_SYSTEM_TYPE_RENDERER);
-    return state_ptr->plugin.shader_acquire_instance_resources(&state_ptr->plugin, s, maps, out_instance_id);
+    return state_ptr->plugin.shader_instance_resources_acquire(&state_ptr->plugin, s, texture_map_count, maps, out_instance_id);
 }
 
-b8 renderer_shader_release_instance_resources(shader* s, u32 instance_id) {
+b8 renderer_shader_instance_resources_release(shader* s, u32 instance_id) {
     renderer_system_state* state_ptr = (renderer_system_state*)systems_manager_get_state(K_SYSTEM_TYPE_RENDERER);
-    return state_ptr->plugin.shader_release_instance_resources(&state_ptr->plugin, s, instance_id);
+    return state_ptr->plugin.shader_instance_resources_release(&state_ptr->plugin, s, instance_id);
 }
 
-b8 renderer_set_uniform(shader* s, shader_uniform* uniform, const void* value) {
+b8 renderer_shader_uniform_set(shader* s, shader_uniform* uniform, const void* value) {
     renderer_system_state* state_ptr = (renderer_system_state*)systems_manager_get_state(K_SYSTEM_TYPE_RENDERER);
-    return state_ptr->plugin.shader_set_uniform(&state_ptr->plugin, s, uniform, value);
+    return state_ptr->plugin.shader_uniform_set(&state_ptr->plugin, s, uniform, value);
 }
 
-b8 renderer_texture_map_acquire_resources(struct texture_map* map) {
+b8 renderer_texture_map_resources_acquire(struct texture_map* map) {
     renderer_system_state* state_ptr = (renderer_system_state*)systems_manager_get_state(K_SYSTEM_TYPE_RENDERER);
-    return state_ptr->plugin.texture_map_acquire_resources(&state_ptr->plugin, map);
+    return state_ptr->plugin.texture_map_resources_acquire(&state_ptr->plugin, map);
 }
 
-void renderer_texture_map_release_resources(struct texture_map* map) {
+void renderer_texture_map_resources_release(struct texture_map* map) {
     renderer_system_state* state_ptr = (renderer_system_state*)systems_manager_get_state(K_SYSTEM_TYPE_RENDERER);
-    state_ptr->plugin.texture_map_release_resources(&state_ptr->plugin, map);
+    state_ptr->plugin.texture_map_resources_release(&state_ptr->plugin, map);
 }
 
 void renderer_render_target_create(u8 attachment_count, render_target_attachment* attachments, renderpass* pass, u32 width, u32 height, render_target* out_target) {
@@ -385,17 +429,17 @@ b8 renderer_is_multithreaded(void) {
     return state_ptr->plugin.is_multithreaded(&state_ptr->plugin);
 }
 
-b8 renderer_flag_enabled(renderer_config_flags flag) {
+b8 renderer_flag_enabled_get(renderer_config_flags flag) {
     renderer_system_state* state_ptr = (renderer_system_state*)systems_manager_get_state(K_SYSTEM_TYPE_RENDERER);
-    return state_ptr->plugin.flag_enabled(&state_ptr->plugin, flag);
+    return state_ptr->plugin.flag_enabled_get(&state_ptr->plugin, flag);
 }
 
-void renderer_flag_set_enabled(renderer_config_flags flag, b8 enabled) {
+void renderer_flag_enabled_set(renderer_config_flags flag, b8 enabled) {
     renderer_system_state* state_ptr = (renderer_system_state*)systems_manager_get_state(K_SYSTEM_TYPE_RENDERER);
-    state_ptr->plugin.flag_set_enabled(&state_ptr->plugin, flag, enabled);
+    state_ptr->plugin.flag_enabled_set(&state_ptr->plugin, flag, enabled);
 }
 
-b8 renderer_renderbuffer_create(renderbuffer_type type, u64 total_size, b8 use_freelist, renderbuffer* out_buffer) {
+b8 renderer_renderbuffer_create(const char* name, renderbuffer_type type, u64 total_size, b8 use_freelist, renderbuffer* out_buffer) {
     renderer_system_state* state_ptr = (renderer_system_state*)systems_manager_get_state(K_SYSTEM_TYPE_RENDERER);
     if (!out_buffer) {
         KERROR("renderer_renderbuffer_create requires a valid pointer to hold the created buffer.");
@@ -406,6 +450,13 @@ b8 renderer_renderbuffer_create(renderbuffer_type type, u64 total_size, b8 use_f
 
     out_buffer->type = type;
     out_buffer->total_size = total_size;
+    if (name) {
+        out_buffer->name = string_duplicate(name);
+    } else {
+        char temp_name[256] = {0};
+        string_format(temp_name, "renderbuffer_%s", "unnamed");
+        out_buffer->name = string_duplicate(temp_name);
+    }
 
     // Create the freelist, if needed.
     if (use_freelist) {
@@ -415,7 +466,7 @@ b8 renderer_renderbuffer_create(renderbuffer_type type, u64 total_size, b8 use_f
     }
 
     // Create the internal buffer from the backend.
-    if (!state_ptr->plugin.renderbuffer_create_internal(&state_ptr->plugin, out_buffer)) {
+    if (!state_ptr->plugin.renderbuffer_internal_create(&state_ptr->plugin, out_buffer)) {
         KFATAL("Unable to create backing buffer for renderbuffer. Application cannot continue.");
         return false;
     }
@@ -432,8 +483,14 @@ void renderer_renderbuffer_destroy(renderbuffer* buffer) {
             buffer->freelist_memory_requirement = 0;
         }
 
+        if (buffer->name) {
+            u32 length = string_length(buffer->name);
+            kfree(buffer->name, length + 1, MEMORY_TAG_STRING);
+            buffer->name = 0;
+        }
+
         // Free up the backend resources.
-        state_ptr->plugin.renderbuffer_destroy_internal(&state_ptr->plugin, buffer);
+        state_ptr->plugin.renderbuffer_internal_destroy(&state_ptr->plugin, buffer);
         buffer->internal_data = 0;
     }
 }

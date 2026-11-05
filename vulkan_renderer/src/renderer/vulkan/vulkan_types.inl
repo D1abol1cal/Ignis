@@ -12,13 +12,13 @@
 
 #pragma once
 
-#include "defines.h"
-#include "core/asserts.h"
-#include "renderer/renderer_types.inl"
+#include <vulkan/vulkan.h>
+
 #include "containers/freelist.h"
 #include "containers/hashtable.h"
-
-#include <vulkan/vulkan.h>
+#include "core/asserts.h"
+#include "defines.h"
+#include "renderer/renderer_types.inl"
 
 /**
  * @brief Checks the given expression's return value against VK_SUCCESS.
@@ -244,10 +244,19 @@ typedef struct vulkan_shader_stage {
     VkPipelineShaderStageCreateInfo shader_stage_create_info;
 } vulkan_shader_stage;
 
+typedef enum vulkan_topology_class {
+    VULKAN_TOPOLOGY_CLASS_POINT = 0,
+    VULKAN_TOPOLOGY_CLASS_LINE = 1,
+    VULKAN_TOPOLOGY_CLASS_TRIANGLE = 2,
+    VULKAN_TOPOLOGY_CLASS_MAX = VULKAN_TOPOLOGY_CLASS_TRIANGLE + 1
+} vulkan_topology_class;
+
 /**
  * @brief A configuration structure for Vulkan pipelines.
  */
 typedef struct vulkan_pipeline_config {
+    /** @brief The name of the pipeline. Used primarily for debugging purposes. */
+    char* name;
     /** @brief A pointer to the renderpass to associate with the pipeline. */
     vulkan_renderpass* renderpass;
     /** @brief The stride of the vertex data to be used (ex: sizeof(vertex_3d)) */
@@ -278,6 +287,8 @@ typedef struct vulkan_pipeline_config {
     u32 push_constant_range_count;
     /** @brief An array of push constant data ranges. */
     range* push_constant_ranges;
+    /** @brief Collection of topology types to be supported on this pipeline. */
+    u32 topology_types;
 } vulkan_pipeline_config;
 
 /**
@@ -288,6 +299,8 @@ typedef struct vulkan_pipeline {
     VkPipeline handle;
     /** @brief The pipeline layout. */
     VkPipelineLayout pipeline_layout;
+    /** @brief Indicates the topology types used by this pipeline. See primitive_topology_type.*/
+    u32 supported_topology_types;
 } vulkan_pipeline;
 
 /**
@@ -311,16 +324,10 @@ typedef struct vulkan_geometry_data {
     u32 id;
     /** @brief The geometry generation. Incremented every time the geometry data changes. */
     u32 generation;
-    /** @brief The vertex count. */
-    u32 vertex_count;
-    /** @brief The size of each vertex. */
-    u32 vertex_element_size;
+    
     /** @brief The offset in bytes in the vertex buffer. */
     u64 vertex_buffer_offset;
-    /** @brief The index count. */
-    u32 index_count;
-    /** @brief The size of each index. */
-    u32 index_element_size;
+    
     /** @brief The offset in bytes in the index buffer. */
     u64 index_buffer_offset;
 } vulkan_geometry_data;
@@ -485,8 +492,13 @@ typedef struct vulkan_shader {
     /** @brief The uniform buffer used by this shader. */
     renderbuffer uniform_buffer;
 
-    /** @brief The pipeline associated with this shader. */
-    vulkan_pipeline pipeline;
+    /** @brief An array of pointers to pipelines associated with this shader. */
+    vulkan_pipeline** pipelines;
+
+    /** @brief The currently bound pipeline index. */
+    u8 bound_pipeline_index;
+    /** @brief The currently-selected topology. */
+    VkPrimitiveTopology current_topology;
 
     /** @brief The instance states for all instances. @todo TODO: make dynamic */
     u32 instance_count;
@@ -585,7 +597,7 @@ typedef struct vulkan_context {
 
     /** @brief Indicates if the swapchain is currently being recreated. */
     b8 recreating_swapchain;
-    
+
     b8 render_flag_changed;
 
     /** @brief The A collection of loaded geometries. @todo TODO: make dynamic */

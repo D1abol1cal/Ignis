@@ -1,26 +1,26 @@
 #include "systems_manager.h"
 
-#include "core/logger.h"
 #include "containers/darray.h"
+#include "core/logger.h"
 
 // Systems
-#include "core/kmemory.h"
-#include "core/engine.h"
 #include "core/console.h"
-#include "core/kvar.h"
+#include "core/engine.h"
 #include "core/event.h"
 #include "core/input.h"
+#include "core/kmemory.h"
+#include "core/kvar.h"
 #include "platform/platform.h"
+#include "renderer/renderer_frontend.h"
+#include "systems/camera_system.h"
+#include "systems/geometry_system.h"
+#include "systems/job_system.h"
+#include "systems/light_system.h"
+#include "systems/material_system.h"
+#include "systems/render_view_system.h"
 #include "systems/resource_system.h"
 #include "systems/shader_system.h"
-#include "renderer/renderer_frontend.h"
-#include "systems/job_system.h"
 #include "systems/texture_system.h"
-#include "systems/camera_system.h"
-#include "systems/render_view_system.h"
-#include "systems/material_system.h"
-#include "systems/geometry_system.h"
-#include "systems/light_system.h"
 
 static b8 register_known_systems_pre_boot(systems_manager_state* state, application_config* app_config);
 static b8 register_known_systems_post_boot(systems_manager_state* state, application_config* app_config);
@@ -104,7 +104,7 @@ void* systems_manager_get_state(u16 type) {
     return 0;
 }
 
-b8 register_known_systems_pre_boot(systems_manager_state* state, application_config* app_config) {
+static b8 register_known_systems_pre_boot(systems_manager_state* state, application_config* app_config) {
     // Memory
     if (!systems_manager_register(state, K_SYSTEM_TYPE_MEMORY, 0, memory_system_shutdown, 0, 0)) {
         KERROR("Failed to register memory system.");
@@ -231,7 +231,7 @@ b8 register_known_systems_pre_boot(systems_manager_state* state, application_con
     return true;
 }
 
-void shutdown_known_systems(systems_manager_state* state) {
+static void shutdown_known_systems(systems_manager_state* state) {
     state->systems[K_SYSTEM_TYPE_CAMERA].shutdown(state->systems[K_SYSTEM_TYPE_CAMERA].state);
     state->systems[K_SYSTEM_TYPE_FONT].shutdown(state->systems[K_SYSTEM_TYPE_FONT].state);
 
@@ -255,7 +255,7 @@ void shutdown_known_systems(systems_manager_state* state) {
     state->systems[K_SYSTEM_TYPE_MEMORY].shutdown(state->systems[K_SYSTEM_TYPE_MEMORY].state);
 }
 
-b8 register_known_systems_post_boot(systems_manager_state* state, application_config* app_config) {
+static b8 register_known_systems_post_boot(systems_manager_state* state, application_config* app_config) {
     // Texture system.
     texture_system_config texture_sys_config;
     texture_sys_config.max_texture_count = 65536;
@@ -286,11 +286,11 @@ b8 register_known_systems_post_boot(systems_manager_state* state, application_co
     }
 
     // Load render views from app config.
-    u32 view_count = darray_length(app_config->render_views);
+    u32 view_count = darray_length(app_config->views);
     for (u32 v = 0; v < view_count; ++v) {
-        render_view_config* view = &app_config->render_views[v];
-        if (!render_view_system_create(view)) {
-            KFATAL("Failed to create view '%s'. Aborting application.", view->name);
+        render_view* view = &app_config->views[v];
+        if (!render_view_system_register(view)) {
+            KFATAL("Failed to register view '%s'. Aborting application.", view->name);
             return false;
         }
     }
